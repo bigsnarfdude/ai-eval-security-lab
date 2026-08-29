@@ -39,10 +39,18 @@ lab/                               The runnable lab (one script per layer).
 | Supply chain | Skopeo + Kyverno | signing/pinning is enforced at *admission*, not just at build |
 | **Memory forensics** | `/proc`, gVisor, gcore | when an attacker defeats disk detection, memory is the last ground |
 
-## Status
+## Status — validated end-to-end on a live NVIDIA A10 (Ubuntu 22.04, kernel 6.8)
 
-- **`50-memory-forensics.sh` + `payload/` — validated end-to-end on a live NVIDIA A10 (Ubuntu 22.04, kernel 6.8).** Presence → behavioral → fileless-`memfd` IOC → exact-bytes recovery from `/proc/<pid>/fd` with a confirmed canary.
-- **`00`–`40` + `harness/` — runnable reference**, exercised on the same box; the fiddly steps (gVisor-into-kind, Falco's eBPF probe, GPU-in-Docker) are flagged inline with their failure modes. Verify as you go rather than assuming.
+The **entire stack** was run on a rented A10, not just written:
+
+- **Cluster build** — kind + `runsc`/gVisor RuntimeClass installed into the node + Falco (modern eBPF) + Kyverno, all up.
+- **Isolation is real** — inside the sandboxed pod `uname` reports `4.19.0-gvisor`, i.e. the workload sees gVisor's user-space kernel, not the host's 6.8.
+- **gVisor blinds host detection (the finding)** — an identical breakout (shell + outbound connect) fired Falco loudly in a `runc` pod (`Shell spawned in workload container … k8s_pod_name=…`, plus the outbound connect) and produced **zero** Falco detections in the gVisor pod; against gVisor, Falco only sees `runsc`'s own `PTRACE_ATTACH`. The production answer is Falco's gVisor integration + egress detection at the CNI/proxy.
+- **Supply chain** — Kyverno's admission webhook **rejected** a tag-pinned pod and **admitted** the digest-pinned one.
+- **End-to-end harness** — Qwen2.5-7B (served by vLLM on the A10) wrote `is_palindrome`, the code ran **inside the gVisor sandbox**, scored 4/4.
+- **Memory forensics** — presence → behavioral → fileless-`memfd` IOC → exact-bytes recovery from `/proc/<pid>/fd` with a confirmed canary.
+
+Fiddly steps (gVisor-into-kind, Falco enrichment, GPU-in-Docker) are flagged inline with the failure modes actually hit while bringing this up.
 
 ## Run it
 
