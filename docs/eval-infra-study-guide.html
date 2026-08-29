@@ -440,6 +440,29 @@
   </div>
 </div>
 
+<h2>Real escapes, and collecting the door &amp; the footstep <span class="pill" style="background:#e3f5e6;color:#1f7a34">validated live</span></h2>
+<p>An important distinction the replication forced: the escape-room's R1 is <b>intra-container privilege escalation</b> (uid 10001 → a root-only file, via a setuid helper) — real unauthorized access, but it never leaves the container. A <b>real container escape</b> crosses to the host, and comes from two misconfig families: <b>over-privilege</b> (<code>privileged</code>, <code>CAP_SYS_ADMIN</code>, <code>hostPID</code>) and <b>mount misconfiguration</b> (the Docker socket, <code>hostPath:/</code>, host <code>/proc</code>). The canonical case — reproduced live as R2:</p>
+<pre style="background:#f0f2f5;border-radius:6px;padding:.8rem 1rem;overflow-x:auto;font-size:.82rem;line-height:1.5;color:#33415c">socket-mounted container  --Docker API-->  host dockerd (root)
+      --spawns-->  --privileged --pid=host container  -->  /proc/1/root = host rootfs  -->  host root</pre>
+<div class="callout">
+  <span class="lead">The detection learning that ties it together</span>
+  A <b>misconfiguration and an IOC are the same inventory viewed at two times</b>: the misconfig is the <em>unlocked door</em> (static, pre-attack — posture); the IOC is the <em>footstep through it</em> (runtime, during-attack). Both are read from the <b>same instruments</b> — <code>docker inspect</code>, <code>/proc</code>, auditd, eBPF — pointed at detection instead of operation.
+</div>
+<div class="layer">
+  <h3>The catalog — for every lateral this lab demonstrates</h3>
+  <table>
+    <thead><tr><th>Lateral</th><th>Enabling misconfig (collect static)</th><th>Runtime IOC (collect live)</th></tr></thead>
+    <tbody>
+      <tr><td class="t">R2 host escape</td><td><code>docker.sock</code> mount / <code>privileged</code> / <code>pid=host</code> / <code>hostPath:/</code> / <code>CAP_SYS_ADMIN</code></td><td>connect to <code>docker.sock</code>; <b>privileged <code>--pid=host</code> launch</b>; read of <code>/proc/1/root/*</code></td></tr>
+      <tr><td class="t">R1 setuid priv-esc</td><td>setuid-root bins (<code>find / -perm -4000</code>); <code>no_new_privs</code> off</td><td><code>execve</code> of setuid bin with <b>uid→0</b>; mass <code>stat</code> of setuid bins</td></tr>
+      <tr><td class="t">Covert channel</td><td>shared writable allowlisted service reachable by ≥2 agents</td><td>client <b>PUTs</b> of non-package content; same key written by one agent, read by another</td></tr>
+      <tr><td class="t">Transcript spoof</td><td>agent authors its own transcript; no trusted exec ledger</td><td><b>transcript ≠ kernel exec</b> (a command ran, unreported)</td></tr>
+      <tr><td class="t">Fileless (memfd)</td><td>(runtime technique — no static door)</td><td><code>/proc/&lt;pid&gt;/exe → memfd:… (deleted)</code>; anon RWX map</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Validated on Docker Desktop: a posture scan (<code>docker inspect</code>) flagged the socket-mounted "door" before the attack; an event watcher (<code>docker events</code>) caught the privileged <code>--pid=host</code> container launch during a live R2 escape. Same field, two phases. Scale-up: kube-bench / kubescape / Trivy + Kyverno-in-audit for posture; Falco/Tetragon + the k8s audit log for runtime.</p>
+</div>
+
 <footer class="doc">
   <b>Sources &amp; provenance:</b> Built from this session's conversation. Tool facts (gVisor/<code>runsc</code>, Firecracker, Falco/eBPF, Skopeo, cosign/Sigstore, Kyverno/OPA, Volcano/Kueue, vLLM, Inspect) reflect general knowledge current to early 2026 — verify exact flags/versions against upstream docs before relying on them. Every result marked "validated" was run end-to-end on a live NVIDIA A10; this is a replication notebook, not a specification. <b>Companion bundle:</b> the scripted lab lives in <code>lab/</code> in this repo.<br>
   <span class="mono">highlevel · explainer · 2026-08-28 · private exploration</span>

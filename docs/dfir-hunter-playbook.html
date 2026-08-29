@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DFIR Hunter Playbook — Agent Laterals &amp; Escapes</title>
+<style>
+  :root{--accent:#7a2f2f;--green:#2a9d3f;--amber:#d4a017;--red:#c0392b;--ink:#222;--sub:#444;--line:#e3e3e3;--bg:#fafafa;--card:#fff;}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0}
+  .wrap{max-width:820px;margin:0 auto;padding:2.5rem 1.5rem 4rem}
+  header.doc{border-bottom:3px solid var(--accent);padding-bottom:1.2rem;margin-bottom:2rem}
+  .kicker{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:1.85rem;line-height:1.2;margin:.4rem 0 .3rem;color:#1a1a1a}
+  .sub{color:var(--sub);font-size:1.05rem;margin:.3rem 0 .5rem}
+  .meta{font-size:.82rem;color:#777}
+  h2{font-size:1.2rem;color:var(--sub);border-left:3px solid var(--accent);padding-left:.7rem;margin:2.4rem 0 1rem}
+  p{margin:.7rem 0}
+  code{font-family:"SF Mono","Fira Code",Consolas,monospace;font-size:.85em;background:#f0eae9;padding:.08em .35em;border-radius:3px;color:#5a2b2b}
+  pre{background:#2b2320;color:#f3ece7;border-radius:6px;padding:.8rem 1rem;overflow-x:auto;font-size:.82rem;line-height:1.5;font-family:"SF Mono","Fira Code",Consolas,monospace}
+  pre .c{color:#c9a98f}
+  .callout{background:#f7efe9;border-left:3px solid var(--accent);padding:.9rem 1.1rem;border-radius:0 6px 6px 0;margin:1.1rem 0}
+  .callout .lead{font-weight:700;color:var(--accent);display:block;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.2rem}
+  table{border-collapse:collapse;width:100%;font-size:.86rem;margin:1rem 0}
+  th,td{border:1px solid var(--line);padding:.5rem .6rem;text-align:left;vertical-align:top}
+  th{background:#f4efee;color:var(--sub)}
+  .hunt{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:0;margin:1.3rem 0;overflow:hidden}
+  .hunt h3{margin:0;padding:.7rem 1rem;background:#f4efee;font-size:1rem;color:#3a2020;border-bottom:1px solid var(--line)}
+  .hunt h3 .id{display:inline-block;background:var(--accent);color:#fff;font-size:.72rem;padding:.1em .5em;border-radius:4px;margin-right:.5em;font-weight:700}
+  .hunt .body{padding:.6rem 1rem 1rem}
+  .field{margin:.7rem 0}
+  .field .k{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:.15rem}
+  .sev{display:inline-block;font-size:.7rem;font-weight:700;padding:.1em .5em;border-radius:20px;margin-left:.4em;vertical-align:middle}
+  .sev.hi{background:#fdecea;color:#a5281b}.sev.md{background:#fdf3dd;color:#8a6d1a}
+  .small{font-size:.85rem;color:#777}
+  footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.8rem;color:#777}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="kicker">Threat Hunting · DFIR · Private</div>
+  <h1>DFIR Hunter Playbook — Agent Laterals &amp; Container Escapes</h1>
+  <div class="sub">Proactive hunt procedures for the laterals reproduced in this lab: container→host escape, in-container priv-esc, covert channels, transcript spoofing, and fileless execution. Companion to the operator <b>RUNBOOK</b> and the replication write-up.</div>
+  <div class="meta">Hunt hypothesis → collect → hunt → confirming IOC → contain. Commands are the ones validated in this lab.</div>
+</header>
+
+<h2>How to hunt this class</h2>
+<p>One governing idea: <b>a misconfiguration and an IOC are the same inventory viewed at two times.</b> The misconfig is the <em>unlocked door</em> (static, pre-attack — collect it with a <b>posture sweep</b>); the IOC is the <em>footstep through it</em> (runtime — collect it from the <b>event/syscall stream</b>). Both are read from the same instruments — <code>docker inspect</code>, <code>/proc</code>, <code>auditd</code>, eBPF — pointed at detection. Hunt both ends: enumerate the doors, then watch for the footsteps on the doors you couldn't close.</p>
+
+<div class="callout">
+  <span class="lead">Wire these data sources first (the hunter's telescope)</span>
+  <b>Posture:</b> <code>docker inspect</code> / k8s API; kube-bench (CIS), kubescape, Trivy config; Kyverno/OPA in <em>audit</em> mode = a continuous misconfig collector at admission.<br>
+  <b>Runtime:</b> <code>docker events</code>; Falco / Tetragon (eBPF syscalls + container launches); <code>auditd</code> (<code>execve</code>/<code>mount</code>/<code>ptrace</code>/<code>connect</code>); the k8s audit log.<br>
+  <b>Forensics:</b> <code>/proc</code> sweeps; <code>gcore</code> / memory capture; Volatility 3.
+</div>
+
+<h2>Hunt cards</h2>
+
+<div class="hunt">
+  <h3><span class="id">H1</span> Container → host escape (docker socket / over-privilege) <span class="sev hi">critical</span></h3>
+  <div class="body">
+    <div class="field"><div class="k">Hypothesis</div>A workload container mounts the Docker socket, or runs privileged / <code>pid=host</code>, and uses it to reach the host root filesystem.</div>
+    <div class="field"><div class="k">Collect — posture (the door)</div>
+<pre><span class="c"># Docker: which running containers hold an escape-grade door?</span>
+for c in $(docker ps -q); do docker inspect $c \
+ | grep -qE '/var/run/docker.sock|"Privileged": true|"PidMode": "host"' && docker inspect -f '{{.Name}}' $c; done
+<span class="c"># k8s:</span> kubectl get pods -A -o json | jq -r '.items[]|select(
+  .spec.hostPID or (.spec.volumes[]?.hostPath) or
+  (.spec.containers[].securityContext.privileged==true))|.metadata.namespace+"/"+.metadata.name'
+<span class="c"># or:</span> kubescape scan  /  kube-bench  /  trivy k8s</pre></div>
+    <div class="field"><div class="k">Hunt — runtime (the footstep)</div>
+<pre><span class="c"># a privileged / pid=host container being launched, live:</span>
+docker events --filter type=container --filter event=create --format '{{.Actor.ID}}' \
+ | while read id; do docker inspect $id 2>/dev/null | grep -qE '"Privileged": true|"PidMode": "host"' \
+   && echo "[IOC] escape-grade launch $id"; done
+<span class="c"># Falco default rules:</span> "Launch Privileged Container", "Docker socket mounted"
+<span class="c"># auditd:</span> connect() to /var/run/docker.sock from a workload PID; open of /proc/1/root/*</pre></div>
+    <div class="field"><div class="k">Confirming IOC</div>A workload-spawned container with <code>Privileged=true</code> + <code>PidMode=host</code>; a process reading <code>/proc/1/root/…</code>; a container connecting to <code>docker.sock</code>.</div>
+    <div class="field"><div class="k">Triage &amp; contain</div>Cordon the node; kill the offending pod without deleting it (preserve for forensics); rotate any creds reachable from the host; add a Kyverno/OPA admission deny for socket mounts / privileged / hostPath; replace direct socket access with a restricted socket proxy.</div>
+  </div>
+</div>
+
+<div class="hunt">
+  <h3><span class="id">H2</span> In-container privilege escalation (setuid) <span class="sev md">high</span></h3>
+  <div class="body">
+    <div class="field"><div class="k">Hypothesis</div>An unprivileged process becomes root inside the container via a setuid-root binary to read a protected file.</div>
+    <div class="field"><div class="k">Collect — posture</div>
+<pre>find / -perm -4000 -type f 2>/dev/null      <span class="c"># setuid-root binaries present</span>
+getcap -r / 2>/dev/null                     <span class="c"># file capabilities</span>
+<span class="c"># is no_new_privs off? (allowPrivilegeEscalation not false)</span></pre></div>
+    <div class="field"><div class="k">Hunt — runtime</div>
+<pre><span class="c"># Falco: setuid / uid-transition rules; auditd execve with a uid change:</span>
+ausearch -m EXECVE,SYSCALL -sc execve | grep -i 'uid=0'    <span class="c"># after starting as non-root</span>
+<span class="c"># recon signature: a burst of stat() over setuid binaries (find -perm -4000)</span></pre></div>
+    <div class="field"><div class="k">Confirming IOC</div>An <code>execve</code> of a setuid binary immediately followed by a uid 10001→0 transition in the same lineage; mass stat of setuid bins.</div>
+    <div class="field"><div class="k">Triage &amp; contain</div>Set <code>allowPrivilegeEscalation:false</code> (<code>no_new_privs</code>); strip setuid bits from the image; drop <code>ALL</code> capabilities.</div>
+  </div>
+</div>
+
+<div class="hunt">
+  <h3><span class="id">H3</span> Covert channel via a shared allowlisted service <span class="sev hi">critical</span></h3>
+  <div class="body">
+    <div class="field"><div class="k">Hypothesis</div>Agents that are isolated from each other exchange messages through a shared, writable, allowlisted store (e.g. a package-repo cache).</div>
+    <div class="field"><div class="k">Collect — posture</div>Inventory every allowlisted egress target that is <em>writable</em> and reachable by more than one agent — those are candidate message buses.</div>
+    <div class="field"><div class="k">Hunt — runtime (on the shared store's access log)</div>
+<pre><span class="c"># a CLIENT issuing PUTs (caches are normally read-only to clients)</span>
+<span class="c"># PUT content that is NOT a real package artifact (no wheel/tar.gz magic)</span>
+<span class="c"># the SAME key written by one agent and read by a different agent  &lt;- message-bus signature</span></pre></div>
+    <div class="field"><div class="k">Confirming IOC</div>Cross-agent read of a key one agent wrote, plus client-side writes of non-package content. (This lab's <code>collect</code> / <code>covert-channel</code> detector implements exactly these three signals.)</div>
+    <div class="field"><div class="k">Triage &amp; contain</div>Give each agent its own namespaced, ideally content-addressed read-only cache; deny agent-to-agent traffic at the CNI; alert on client PUTs to shared stores.</div>
+  </div>
+</div>
+
+<div class="hunt">
+  <h3><span class="id">H4</span> Transcript / tool-call spoofing <span class="sev hi">critical</span></h3>
+  <div class="body">
+    <div class="field"><div class="k">Hypothesis</div>The agent's self-reported transcript omits or misrepresents what it actually executed, to slip a benign story past a transcript-reading scorer or reviewer.</div>
+    <div class="field"><div class="k">Collect — posture</div>Is the transcript agent-authored? Is there an independent execution ledger (a tool broker) and out-of-band syscall capture to reconcile against? If not, transcripts are untrusted by construction.</div>
+    <div class="field"><div class="k">Hunt — runtime</div>
+<pre><span class="c"># reconcile the agent's transcript against the kernel's execve record:</span>
+<span class="c">#   claimed commands (from transcript)  vs  actual execs (auditd / Falco)</span>
+<span class="c"># flag any command that RAN but was never reported.</span></pre></div>
+    <div class="field"><div class="k">Confirming IOC</div>Transcript ≠ kernel exec — an executed command with no corresponding transcript entry.</div>
+    <div class="field"><div class="k">Triage &amp; contain</div>Derive the transcript from the trusted broker, not the agent; treat any run whose transcript can't be reconciled as void; escalate the trajectory to human review.</div>
+  </div>
+</div>
+
+<div class="hunt">
+  <h3><span class="id">H5</span> Fileless execution (memfd) <span class="sev md">high</span></h3>
+  <div class="body">
+    <div class="field"><div class="k">Hypothesis</div>Code runs from an anonymous in-memory file (<code>memfd</code>) so it never touches disk and evades file/disk scanning.</div>
+    <div class="field"><div class="k">Collect — posture</div>None — this is a runtime-only technique. Prevention is exec allowlisting (fapolicyd) / IMA.</div>
+    <div class="field"><div class="k">Hunt — runtime / forensics</div>
+<pre><span class="c"># sweep every process for a deleted/anonymous executable backing:</span>
+for p in /proc/[0-9]*; do t=$(readlink $p/exe 2>/dev/null); \
+  case "$t" in *memfd:*|*"(deleted)"*) echo "$p -> $t";; esac; done
+<span class="c"># also: anon RWX mappings in /proc/&lt;pid&gt;/maps; Volatility 3 malfind on a capture</span></pre></div>
+    <div class="field"><div class="k">Confirming IOC</div><code>/proc/&lt;pid&gt;/exe → memfd:… (deleted)</code>; an open memfd holding executable content; anonymous RWX regions.</div>
+    <div class="field"><div class="k">Triage &amp; contain</div>Recover the payload from <code>/proc/&lt;pid&gt;/fd</code> or a core dump for evidence; kill; block memfd exec via seccomp/fapolicyd.</div>
+  </div>
+</div>
+
+<h2>Triage at a glance</h2>
+<table>
+  <thead><tr><th>Signal seen</th><th>Most likely hunt</th><th>First move</th></tr></thead>
+  <tbody>
+    <tr><td>privileged / <code>pid=host</code> container launched by a workload</td><td>H1 escape</td><td>cordon node, preserve pod</td></tr>
+    <tr><td>process reading <code>/proc/1/root/*</code></td><td>H1 escape</td><td>cordon node</td></tr>
+    <tr><td>uid 10001→0 via setuid exec</td><td>H2 priv-esc</td><td>kill, harden securityContext</td></tr>
+    <tr><td>cross-agent read on a shared cache</td><td>H3 covert channel</td><td>isolate caches, deny p2p</td></tr>
+    <tr><td>transcript ≠ kernel exec</td><td>H4 spoof</td><td>void run, human review</td></tr>
+    <tr><td><code>exe → memfd (deleted)</code></td><td>H5 fileless</td><td>recover payload, kill</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <span class="lead">The one principle behind every card</span>
+  Never trust the observed to report on itself — collect ground truth from a layer the subject can't edit (the kernel, <code>/proc</code>, the admission webhook, the broker ledger), then reconcile. The door and the footstep are the same field seen twice.
+</div>
+
+<footer>
+  Companion to <code>RUNBOOK.md</code> (operate) and <code>docs/eval-infra-study-guide.html</code> (replicate). Commands validated in this lab on a live A10 (cluster) and Docker Desktop (R2 / collector). Benign, defensive use only — see the repo's Safety notes.
+</footer>
+
+</div>
+</body>
+</html>

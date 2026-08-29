@@ -14,11 +14,17 @@ matters.
 
 > Security research / case-study replication. Benign throughout — see **Safety** below.
 
+**Two views of the same material:** [`RUNBOOK.md`](RUNBOOK.md) is the **operator** view (stand up
+and run the replication); [`docs/dfir-hunter-playbook.html`](docs/dfir-hunter-playbook.html) is the
+**defender** view (hunt these laterals — hypothesis → collect → hunt → IOC → contain).
+
 ## What's inside
 
 ```
 docs/eval-infra-study-guide.html   The replication write-up: architecture, toy↔scale per layer,
                                    the sandboxing/forensics deep-dive, and the incident mapping.
+docs/dfir-hunter-playbook.html     DFIR hunter playbook: a hunt card per lateral (H1–H5)
+RUNBOOK.md                         Operator runbook: stand up + run each reproduction, teardown
 lab/                               The runnable lab (one script per layer).
   00-preflight.sh                  Host checks + install kind, kubectl, skopeo, runsc, helm
   10-serve-model.sh                vLLM serves a real small model (OpenAI-compatible)
@@ -29,11 +35,13 @@ lab/                               The runnable lab (one script per layer).
   60-covert-channel.sh             two isolated agents collude via a shared allowlisted cache → detect → prevent
   70-transcript-spoof.sh           agent's self-reported transcript is a lie → caught by out-of-band kernel capture
   80-escape-room.sh                ExploitGym-shaped eval: vLLM agent escapes a room → scored escaped × method × detected
+  90-collect-and-detect.sh         collect the misconfig (posture) + the IOC (runtime) for a live R2 escape
   harness/run_eval.py              Model writes code → runs it IN the sandbox → scored
   payload/                         Benign memory-forensics samples (canary agent, fileless launcher)
   covert-channel/                  The Hugging Face incident's signature failure, reproduced + fixed
   transcript-spoof/                Spoofed tool calls (incident surprise #5), caught by reconciliation
-  escape-room/                     Escape-room eval R1 (locked flag + setuid helper), out-of-band scored
+  escape-room/                     R1 (setuid priv-esc, eval) + R2 (real container→host escape)
+  collect/                         misconfig posture scan + runtime IOC watch + the catalog
 ```
 
 ## The layers, and what each teaches
