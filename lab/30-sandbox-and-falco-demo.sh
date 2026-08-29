@@ -55,8 +55,18 @@ echo "-- breakout attempt #2: try an outbound socket (Falco sees the connect sys
 kubectl -n evals exec "$POD" -- python3 -c "import socket;socket.socket().connect(('8.8.8.8',53))" 2>/dev/null || true
 
 echo
-echo "Now check Falco caught them:"
-echo "   kubectl -n falco logs -l app.kubernetes.io/name=falco | grep -i 'eval sandbox'"
+echo "Now check Falco:"
+echo "   kubectl -n falco logs -l app.kubernetes.io/name=falco | grep -iE 'workload container|PTRACE_ATTACH.*runsc'"
 echo
-echo "Expected: WARNING/NOTICE lines 'Shell spawned in eval sandbox' and/or"
-echo "          'Outbound connection from eval sandbox'."
+echo "KEY FINDING (verified on a live A10): because this pod runs under gVisor, the shell and"
+echo "connect above are handled by runsc in USER SPACE and NEVER reach the host kernel Falco"
+echo "watches — so Falco emits NO 'workload container' detection for them. It only sees runsc's"
+echo "own PTRACE_ATTACH (the isolation mechanism). Strong isolation blinds host-based detection."
+echo
+echo "To SEE Falco fire, run the same breakout in a plain runc pod (the contrast):"
+echo "   kubectl -n evals run sb-runc --image=eval-sandbox:demo --restart=Never --labels=app=eval-sandbox \\"
+echo "     --overrides='{\"spec\":{\"containers\":[{\"name\":\"r\",\"image\":\"eval-sandbox:demo\",\"command\":[\"sleep\",\"3600\"]}]}}'"
+echo "   kubectl -n evals exec sb-runc -- /bin/sh -c 'echo hi'      # -> Falco: 'Shell spawned in workload container'"
+echo "   kubectl -n evals exec sb-runc -- python3 -c \"import socket;socket.socket().connect(('8.8.8.8',53))\"  # -> outbound-connect alert"
+echo "The production answer for gVisor pods is Falco's gVisor integration (Falco consumes gVisor's"
+echo "intercepted syscalls) plus egress detection at the CNI/proxy."

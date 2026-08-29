@@ -235,6 +235,20 @@
 </div>
 
 <div class="layer">
+  <h3>What actually happened running this on a live A10 <span class="pill" style="background:#e3f5e6;color:#1f7a34">validated</span></h3>
+  <p>The lab was run end-to-end on a rented NVIDIA A10 (Ubuntu 22.04). Two results are worth carrying into an interview because they're the kind of thing you only know from having done it:</p>
+  <ul class="tight">
+    <li><span class="chip" style="background:var(--green)"></span><b>gVisor isolation is real and verifiable in one command.</b> Inside the sandboxed pod, <code>uname</code> reports <code>4.19.0-gvisor</code> — the workload sees gVisor's user-space kernel, not the host's 6.8. Different kernel string = the syscall boundary is actually there.</li>
+    <li><span class="chip" style="background:var(--amber)"></span><b>Strong isolation blinds host-based detection.</b> The identical breakout (spawn a shell, connect out) fired Falco loudly in a plain <code>runc</code> pod — <em>"Shell spawned in workload container … k8s_pod_name=sb-runc"</em> and the outbound connect, fully attributed. In the <b>gVisor</b> pod it produced <b>zero</b> Falco detections: the payload's syscalls are handled by <code>runsc</code> in user space and never reach the host kernel that Falco's eBPF probe watches. Against the gVisor pod, Falco instead only sees <code>runsc</code>'s own <code>PTRACE_ATTACH</code> — the isolation mechanism, not the payload.</li>
+  </ul>
+  <div class="callout" style="margin:.8rem 0 0">
+    <span class="lead">The line this earns you</span>
+    <em>"gVisor and a host-based syscall monitor are in tension — the stronger the isolation, the less your host probe sees. So with gVisor you either use its <b>Falco gVisor integration</b> (Falco consumes gVisor's own intercepted syscalls) or you move detection to a layer gVisor doesn't hide: the CNI/egress proxy and application behavior. Defense in depth has to account for what each layer makes invisible to the next."</em>
+  </div>
+  <p class="small">Also learned the hard way: Falco's host probe gets a container <em>id</em> from cgroups but no image/namespace metadata until it's enriched from the CRI socket — so image- or namespace-keyed rules silently never match until enrichment is up. Rules keyed on the plain <code>container</code> macro work immediately.</p>
+</div>
+
+<div class="layer">
   <h3>Skopeo + admission control — only inspected knives enter <span class="small">(you named it)</span></h3>
   <p><b>Skopeo</b> inspects and copies OCI images <em>without a daemon</em> — <code>skopeo inspect docker://…</code> to read a manifest/digest, copy between registries, check what's actually in an image before it runs. Pair with <b>cosign/sigstore</b> (signatures) and a <b>Kyverno/OPA</b> admission policy that refuses to admit any Pod whose image isn't signed and pinned by digest. That's the supply-chain-hygiene story: <em>"we don't run unsigned or floating-tag images in the eval sandbox."</em></p>
 </div>
@@ -292,6 +306,12 @@
   <div class="q">How would you detect that a sandboxed task tried to break out?</div>
   <div class="a">Runtime syscall monitoring with Falco or Tetragon over eBPF. I write rules scoped to the eval namespace: no shell spawns, no outbound connects, no writes outside the work dir, no ptrace, no unexpected setuid. A hit alerts and can trigger Pod kill. Detection is layered under prevention — the sandbox should stop it; Falco tells me when something <em>tried</em>.</div>
   <div class="tell"><b>Tell:</b> "detection <b>under</b> prevention" — you understand defense in depth, not detection as the only control.</div>
+</div>
+
+<div class="qa">
+  <div class="q">If you sandbox eval tasks with gVisor, does Falco still see what the task does?</div>
+  <div class="a">Not through the host probe. gVisor handles the workload's syscalls in user space (<code>runsc</code>), so they never reach the host kernel that Falco's eBPF watches — I verified this: an identical breakout fired Falco in a runc pod and was invisible in a gVisor pod, where Falco only saw <code>runsc</code>'s own ptrace. The fix is Falco's gVisor integration, where Falco consumes gVisor's intercepted syscalls, plus detection at layers gVisor doesn't hide — egress at the CNI/proxy and app behavior.</div>
+  <div class="tell"><b>Tell:</b> naming the isolation-vs-observability tension, and that each defense layer can blind the next — few candidates have hit this.</div>
 </div>
 
 <div class="qa">

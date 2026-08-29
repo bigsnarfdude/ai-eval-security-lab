@@ -55,7 +55,16 @@ if ! have runsc; then
 fi
 
 say "Versions"
-for b in docker kind kubectl skopeo helm runsc; do printf '%-10s ' "$b"; $b --version 2>/dev/null | head -1 || echo "MISSING"; done
+# note: kubectl/helm use 'version', not '--version'; check presence first to avoid false MISSING
+for b in docker kind kubectl skopeo helm runsc; do
+  printf '%-10s ' "$b"
+  if ! command -v "$b" >/dev/null 2>&1; then echo "MISSING"; continue; fi
+  case "$b" in
+    kubectl) kubectl version --client 2>/dev/null | head -1;;
+    helm)    helm version --short 2>/dev/null;;
+    *)       "$b" --version 2>/dev/null | head -1;;
+  esac
+done
 
 echo
 echo "Preflight done. Next: ./10-serve-model.sh"

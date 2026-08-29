@@ -1,42 +1,34 @@
-# Custom Falco rules for the eval sandbox. Loaded by 20-kind-up.sh via the Helm chart's
-# customRules. They key on the container image 'eval-sandbox' so no k8s-metadata plugin is
-# needed — robust for a demo. In prod you'd scope by namespace via the k8smeta plugin.
+# Custom Falco rules for the eval sandbox.
+#
+# IMPORTANT LESSON (verified on a live A10 kind cluster): Falco's HOST eBPF probe gets the
+# container *id* from cgroups but NOT image/pod metadata unless it is enriched from the CRI
+# socket. So image- or namespace-keyed rules SILENTLY NEVER MATCH here. We therefore key on the
+# built-in `container` macro (container.id != host), which uses the cgroup id Falco always has.
+# In this lab the only workload container is the eval sandbox, so that is precise enough.
+#
+# SECOND LESSON: a workload running under gVisor is INVISIBLE to these host rules — its syscalls
+# are handled in user space by runsc and never reach the host kernel. Against a gVisor pod, Falco
+# instead sees runsc's own PTRACE_ATTACH. The fix in production is Falco's gVisor integration
+# (Falco reads gVisor's intercepted syscalls), not the host probe. The runc pod is where these
+# fire; the contrast IS the point.
 
-- macro: eval_sandbox_container
-  condition: (container.image.repository = "eval-sandbox" or container.image.repository endswith "/eval-sandbox")
-
-- rule: Shell spawned in eval sandbox
-  desc: A shell was started inside an eval sandbox that should only ever run the task interpreter.
+- rule: Shell spawned in a workload container
+  desc: A shell started inside a container. In this lab the only workload is the eval sandbox.
   condition: >
-    spawned_process and eval_sandbox_container
-    and proc.name in (shell_binaries)
+    spawned_process and container and proc.name in (shell_binaries)
   output: >
-    Shell spawned in eval sandbox (pod=%container.name image=%container.image.repository
+    Shell spawned in workload container (cid=%container.id img=%container.image.repository
     proc=%proc.cmdline parent=%proc.pname user=%user.name)
   priority: WARNING
   tags: [eval, breakout, mitre_execution]
 
-- rule: Outbound connection from eval sandbox
-  desc: The eval sandbox attempted an outbound network connection; it should have no egress.
+- rule: Outbound connection from a workload container
+  desc: A container made an outbound connection; the eval sandbox should have no egress.
   condition: >
     (evt.type = connect and evt.dir = < and fd.l4proto in (tcp, udp))
-    and fd.sip != "127.0.0.1" and eval_sandbox_container
+    and container and fd.sip != "127.0.0.1"
   output: >
-    Outbound connection from eval sandbox (pod=%container.name dest=%fd.sip:%fd.sport
-    proc=%proc.cmdline)
+    Outbound connection from workload container (cid=%container.id dest=%fd.sip:%fd.sport
+    img=%container.image.repository proc=%proc.cmdline)
   priority: WARNING
   tags: [eval, breakout, exfiltration]
-
-- rule: Write outside work dir in eval sandbox
-  desc: The eval sandbox wrote to a path other than /work; rootfs is read-only, this is suspicious.
-  condition: >
-    (evt.type in (open, openat, openat2) and evt.is_open_write = true)
-    and eval_sandbox_container
-    and not fd.name startswith "/work"
-    and not fd.name startswith "/tmp"
-    and not fd.name startswith "/proc"
-    and not fd.name startswith "/dev"
-  output: >
-    Write outside /work in eval sandbox (pod=%container.name file=%fd.name proc=%proc.cmdline)
-  priority: NOTICE
-  tags: [eval, breakout]
