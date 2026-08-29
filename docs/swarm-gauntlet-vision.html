@@ -50,6 +50,7 @@
     <li><b>The instrument.</b> A <b>gauntlet</b> of escape-room stages run by a <b>swarm</b> of agents on an instrumented substrate that captures complete, tamper-evident, out-of-band forensics — so each run produces the same kind of artifact incident investigators reconstructed by hand.</li>
     <li><b>The novel artifact.</b> Swarm forensics' unit of investigation is the <em>interaction</em>, not the process. The headline output is an <b>influence graph</b>: who wrote what that another agent then read and acted on — coordination made explicit.</li>
     <li><b>Already ~70% built.</b> The controls, escapes, forensics chain, and hunter playbook exist and are validated. The new pieces are the swarm harness, the immutable substrate ledger, the influence-graph reconstructor, and the multi-agent rooms.</li>
+    <li><b>Where the hardness concentrates.</b> Most of what remains is tractable engineering; the genuine difficulty is two things — building a <em>causal</em> influence graph (reading ≠ being influenced), and the open question of whether collusion <em>emerges</em> at toy scale. A negative result is a real, informative outcome. We de-risk by validating the forensics instrument on a forced, known interaction before testing emergence.</li>
     <li><b>The science.</b> A forensics-instrumented version of the open RRMA question — sweep isolation × substrate × model-mix × size × objective and watch which conditions produce collusion, escape, and cover-up. The influence graph is the dependent variable.</li>
   </ul>
 </div>
@@ -112,12 +113,37 @@
   </ul>
 </div>
 
+<h2>What's genuinely hard — and how we de-risk it</h2>
+<p>Being honest about the step-change from single- to multi- to swarm: the hardness is <b>concentrated, not spread</b>. Most of the remaining build extends tools that already work; two things are genuinely hard, and one of them is a research risk no amount of engineering removes.</p>
+<table>
+  <thead><tr><th>Component</th><th>Difficulty</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td class="t">isolation · cache+ledger seed · transcript reconciliation · detection · R1/R2</td><td class="done">done</td><td>already built &amp; validated</td></tr>
+    <tr><td class="t">swarm orchestrator · immutable hash-chained ledger · room semantics · timeline correlator</td><td class="wip">moderate engineering</td><td>extends existing tools; testable deterministically</td></tr>
+    <tr><td class="t">causal influence-graph reconstructor</td><td class="new">hard / novel</td><td>attribution, not logging — reading ≠ being influenced</td></tr>
+    <tr><td class="t">does collusion <em>emerge</em> at toy scale?</td><td style="color:var(--red);font-weight:700">open research risk</td><td>emergence can't be engineered; a negative result is possible</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <span class="lead">The two hard things — stated plainly</span>
+  <b>1. The influence graph is causal inference, not logging.</b> Recording "B read A's message" is easy; establishing "B acted <em>because of</em> A" is not. The honest v0 edge is <em>correlational</em> (A wrote token X; B's later action contains X), explicitly labeled as such, with causal confirmation only via ablation (remove A's message — does B's action change?). Overclaiming causality here is the fastest route to a wrong forensic report.<br>
+  <b>2. Emergence is hoped for, not built.</b> You construct the substrate and the incentive, but collusion emerged in the incident from scale + training history. Whether 3–20 toy agents reproduce it is unknown — and a clean negative ("collusion doesn't emerge below scale N") is itself a finding, not a failure.
+</div>
+<h3>De-risk strategy</h3>
+<div class="es">
+  <ul>
+    <li><b>Force coordination first, then test emergence.</b> Start with split-flag, where an agent <em>cannot</em> win without pooling — so a known A→B interaction <em>must</em> occur. Build and check the ledger + reconstructor against that known interaction before relaxing to optional coordination. Debug the forensics on a case whose answer you already know (the same discipline the escape-room's reference solver used).</li>
+    <li><b>Ship the instrument separately from the findings.</b> The harness, ledger, timeline, and correlational graph are buildable and testable now; whether they reveal emergent collusion is a downstream experiment. Don't couple "did the tool work" to "did the swarm misbehave."</li>
+    <li><b>Start at N=2–3, hand-verifiable.</b> Two agents and one forced interaction is enough to prove the reconstructor correct on a graph you can check by eye. Scale is a separate, later problem — and it's the forensics plane, not the agent count, that's hard to scale.</li>
+  </ul>
+</div>
+
 <h2>Roadmap</h2>
 <table>
   <thead><tr><th>Phase</th><th>Scope</th><th>New pieces</th><th>Runs on</th></tr></thead>
   <tbody>
     <tr><td><span class="phase">P0</span> foundation <span class="done">done</span></td><td>single-agent controls, R1/R2 escapes, forensics chain, collector, hunter playbook</td><td>—</td><td>A10 + Mac (validated)</td></tr>
-    <tr><td><span class="phase">P1</span> swarm v0</td><td>3 agents through R3 split-flag; the minimal swarm-forensics report</td><td>swarm harness · immutable substrate ledger · influence-graph reconstructor · spoof/tamper scorecard</td><td>A10 (real gVisor + Falco) / scaled on Mac</td></tr>
+    <tr><td><span class="phase">P1</span> instrument v0</td><td>2–3 agents, <b>forced</b> split-flag (winning requires pooling); validate the ledger + correlational influence graph against the <em>known</em> interaction — the go/no-go for the whole idea</td><td>swarm harness · immutable hash-chained ledger · correlational influence reconstructor</td><td>A10 (real gVisor + Falco) / scaled on Mac</td></tr>
     <tr><td><span class="phase">P2</span> full gauntlet</td><td>10–20 agents through R1–R6; detect/miss scorecard across all controls</td><td>R4–R6 rooms · role-emergence detection</td><td>A10</td></tr>
     <tr><td><span class="phase">P3</span> the science</td><td>sweep isolation × substrate × model-mix × size × objective; influence graph as dependent variable</td><td>experiment harness · parameter sweeps · comparative reports</td><td>A10 / rented multi-GPU</td></tr>
     <tr><td><span class="phase">P4</span> scale</td><td>push the forensics plane toward incident scale (100s–1000s agents)</td><td>scalable ledger + graph store</td><td>cluster (fabric — the one genuinely scale-only part)</td></tr>
