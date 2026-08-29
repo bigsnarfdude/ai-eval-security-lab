@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: eval-sandbox
+  namespace: evals
+  labels: { app: eval-sandbox }
+spec:
+  runtimeClassName: gvisor          # <-- the isolation boundary: runs under runsc, not the host kernel
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault          # syscall allow-list, defense in depth alongside gVisor
+  containers:
+    - name: runner
+      image: eval-sandbox:demo      # dedicated image so Falco can key rules on it
+      imagePullPolicy: IfNotPresent
+      command: ["python3", "-c", "import time; print('sandbox up, idle', flush=True); time.sleep(3600)"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests: { cpu: "100m", memory: "128Mi" }
+        limits:   { cpu: "500m", memory: "512Mi" }
+      volumeMounts:
+        - { name: work, mountPath: /work }   # the only writable path
+  volumes:
+    - name: work
+      emptyDir: { sizeLimit: "64Mi" }

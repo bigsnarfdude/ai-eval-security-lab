@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: evals
+spec:
+  podSelector: {}          # every pod in the namespace
+  policyTypes: [Egress]
+  # No egress rules => all outbound traffic denied. Add explicit allows for a mediated proxy
+  # if a task legitimately needs the network. Default posture for untrusted code = no network.
+  egress: []
+---
+# NOTE: NetworkPolicy is only enforced if the CNI supports it. kind's default CNI (kindnet)
+# does NOT enforce NetworkPolicy. For real enforcement, create the cluster with Calico, or
+# rely on gVisor + not granting the sandbox any egress route. The 30-demo also shows the
+# connect() failing; if your CNI ignores this policy, the connect() may succeed — that's a
+# teaching moment about *where* egress control actually lives. See README.

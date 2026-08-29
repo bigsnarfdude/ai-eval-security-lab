@@ -1,0 +1,20 @@
+# local run artifacts — never commit these
+*.log
+core.*
+*.core
+recovered_payload
+**/recovered_payload
+fx.log
+
+# model / HF cache (huge, machine-local)
+.cache/
+huggingface/
+
+# os cruft
+.DS_Store
+Thumbs.db
+
+# editor
+.idea/
+.vscode/
+*.swp

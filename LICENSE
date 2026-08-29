@@ -1,0 +1,11 @@
+Copyright (c) 2026 bigsnarfdude
+
+All rights reserved.
+
+This is a personal study and portfolio project. The code and documents here are shared for
+review and demonstration purposes. No license to reuse, redistribute, or create derivative
+works is granted without the author's written permission.
+
+The security samples in `lab/payload/` are benign and provided strictly for defensive and
+educational use — memory-forensics practice against known-ground-truth artifacts. They must not
+be used against any system without authorization.

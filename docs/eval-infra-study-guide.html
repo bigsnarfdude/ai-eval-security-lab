@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Frontier Labs Run Evals — Interview Study Guide</title>
+<style>
+  :root{
+    --accent:#2c5aa0; --green:#2a9d3f; --amber:#d4a017; --red:#c0392b; --blue:#2c5aa0; --gray:#777;
+    --ink:#222; --sub:#444; --line:#e3e3e3; --bg:#fafafa; --card:#fff;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;padding:0}
+  .wrap{max-width:760px;margin:0 auto;padding:2.5rem 1.5rem 4rem}
+  header.doc{border-bottom:3px solid var(--accent);padding-bottom:1.2rem;margin-bottom:2rem}
+  header.doc .kicker{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:1.9rem;line-height:1.2;margin:.4rem 0 .3rem;color:#1a1a1a}
+  header.doc .sub{color:var(--sub);font-size:1.05rem;margin:.3rem 0 .6rem}
+  header.doc .meta{font-size:.82rem;color:var(--gray)}
+  h2{font-size:1.25rem;color:var(--sub);border-left:3px solid var(--accent);padding-left:.7rem;margin:2.6rem 0 1rem}
+  h3{font-size:1.02rem;color:#333;margin:1.6rem 0 .5rem}
+  p{margin:.7rem 0}
+  code,.mono{font-family:"SF Mono","Fira Code","Consolas",monospace;font-size:.86em}
+  code{background:#f0f2f5;padding:.08em .35em;border-radius:3px;color:#33415c}
+  .tldr{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:1.2rem 1.4rem}
+  .tldr ul{margin:.3rem 0;padding-left:1.1rem}
+  .tldr li{margin:.5rem 0}
+  .chip{display:inline-block;width:.7em;height:.7em;border-radius:2px;margin-right:.35em;vertical-align:baseline;position:relative;top:1px}
+  .legend{font-size:.82rem;color:var(--gray);display:flex;flex-wrap:wrap;gap:1.1rem;margin:.4rem 0 0}
+  .legend span{display:inline-flex;align-items:center}
+  .callout{background:#eef3fb;border-left:3px solid var(--accent);padding:.9rem 1.1rem;border-radius:0 6px 6px 0;margin:1.2rem 0}
+  .callout .lead{font-weight:700;color:var(--accent);display:block;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.2rem}
+  .fig{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:1.2rem;margin:1.4rem 0;overflow-x:auto}
+  .fig figcaption{font-size:.8rem;color:var(--gray);margin-top:.7rem;text-align:center}
+  table{border-collapse:collapse;width:100%;font-size:.87rem;margin:1rem 0}
+  th,td{border:1px solid var(--line);padding:.55rem .65rem;text-align:left;vertical-align:top}
+  th{background:#f2f4f7;color:var(--sub);font-weight:600}
+  td .t{font-weight:600}
+  .transfer-yes{color:var(--green);font-weight:600}
+  .transfer-part{color:var(--amber);font-weight:600}
+  .transfer-no{color:var(--red);font-weight:600}
+  .layer{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:1rem 1.2rem;margin:.9rem 0}
+  .layer h3{margin-top:.2rem}
+  .qa{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:1rem 1.2rem;margin:1.1rem 0}
+  .qa .q{font-weight:700;color:#1f2d44}
+  .qa .q::before{content:"Q";display:inline-block;background:var(--accent);color:#fff;font-size:.7rem;width:1.3em;height:1.3em;line-height:1.3em;text-align:center;border-radius:3px;margin-right:.5em;vertical-align:middle;font-weight:700}
+  .qa .a{margin-top:.5rem}
+  .qa .tell{margin-top:.6rem;font-size:.85rem;color:#5a6b4a;background:#f2f7ec;border-radius:5px;padding:.5rem .7rem}
+  .qa .tell b{color:var(--green)}
+  .gems{list-style:none;padding:0;margin:1rem 0}
+  .gems li{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.7rem .9rem;margin:.6rem 0;font-size:.92rem}
+  .gems li b{color:var(--accent)}
+  .pill{display:inline-block;font-size:.72rem;font-weight:700;padding:.12em .5em;border-radius:20px;margin-left:.4em;vertical-align:middle}
+  .pill.jewel{background:#fdf0d5;color:#8a6d1a}
+  footer.doc{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--line);font-size:.8rem;color:var(--gray)}
+  footer.doc code{font-size:.9em}
+  .small{font-size:.85rem;color:var(--gray)}
+  ul.tight{margin:.4rem 0;padding-left:1.2rem}
+  ul.tight li{margin:.3rem 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="kicker">Interview Study Guide · Private</div>
+  <h1>How a Frontier Lab Runs Model Evals — and the Toy You Can Build</h1>
+  <div class="sub">The architecture, what replicates at laptop scale, what only changes at 10,000 GPUs, and a question bank with answers that signal you've actually touched it.</div>
+  <div class="meta">2026-08-28 · study notebook, not a build · read in one sitting</div>
+</header>
+
+<div class="tldr">
+  <strong style="color:var(--accent)">TL;DR</strong>
+  <ul>
+    <li>An eval platform is an <b>untrusted-code execution service that happens to score models</b>. Agentic/coding evals run code the model-under-test wrote, so isolation is the reason the architecture looks the way it does — not a bolt-on.</li>
+    <li>Most of the stack <b>scales out, not up</b>: same primitives, more replicas. The parts that genuinely change at scale are the <b>interconnect fabric</b> and <b>multi-node model parallelism</b> — everything else fits on a laptop.</li>
+    <li>The <b>sandboxing + runtime-security layer</b> (gVisor / Firecracker, Falco, Skopeo, admission policy) replicates <em>faithfully</em> at toy scale and is what interviewers probe hardest. Build and demo that.</li>
+    <li>The single best line to have ready: <em>"the container/VM isolation boundary is the whole design constraint; the GPU cluster is just how you run enough of them."</em></li>
+    <li>Your "infect a benign agent, recover the payload from memory" idea is <b>right</b> — it's just really <em>"a sandboxed task attempts breakout, Falco catches it, and here's the post-incident forensics."</em></li>
+  </ul>
+  <div class="legend">
+    <span><span class="chip" style="background:var(--green)"></span>replicates faithfully</span>
+    <span><span class="chip" style="background:var(--amber)"></span>concept transfers, scale doesn't</span>
+    <span><span class="chip" style="background:var(--red)"></span>describe-only at toy scale</span>
+    <span><span class="chip" style="background:var(--blue)"></span>talking point / next step</span>
+  </div>
+</div>
+
+<h2>The setup — why an eval platform looks like a security product</h2>
+<p>Think of it as a <b>restaurant kitchen that lets strangers cook</b>. The model under test writes code — to solve a coding task, drive a browser, use tools — and you have to actually <em>run</em> that code to score it. You're executing output from an entity you're specifically testing for whether it will misbehave. So the building isn't designed around stoves (GPUs); it's designed around <b>walls</b>: each stranger gets a locked station, someone watches every station for a knife coming out, and nobody leaves with the silverware.</p>
+<p>That single fact — <b>you run untrusted, possibly-adversarial code at scale</b> — explains every layer below. Kubernetes is there to schedule thousands of locked stations. gVisor/Firecracker are the walls. Falco is the person watching. Skopeo and admission control make sure only inspected knives enter the kitchen. The GPUs are almost incidental to the <em>shape</em> of the system; they're just why it's expensive.</p>
+
+<h2>The architecture — one eval request's journey</h2>
+<div class="fig">
+<svg viewBox="0 0 720 470" width="100%" role="img" aria-label="Flow of an eval task through the six layers of an eval platform">
+  <defs>
+    <marker id="arw" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#2c5aa0"/>
+    </marker>
+    <style>
+      .box{fill:#fff;stroke:#2c5aa0;stroke-width:1.5;rx:7}
+      .lbl{font:600 13px -apple-system,sans-serif;fill:#1f2d44}
+      .sub{font:11px -apple-system,sans-serif;fill:#666}
+      .num{font:700 11px monospace;fill:#2c5aa0}
+      .flow{stroke:#2c5aa0;stroke-width:1.6;fill:none}
+      .danger{fill:#fdecea;stroke:#c0392b;stroke-width:1.6}
+      .dlbl{font:600 13px -apple-system,sans-serif;fill:#8a2b1f}
+    </style>
+  </defs>
+
+  <!-- 1 harness -->
+  <rect class="box" x="30" y="24" width="300" height="58" rx="7"/>
+  <text class="num" x="44" y="44">1</text>
+  <text class="lbl" x="62" y="45">Eval harness</text>
+  <text class="sub" x="62" y="63">picks task, builds prompt, tracks concurrency/retries</text>
+
+  <!-- 2 model serving -->
+  <rect class="box" x="390" y="24" width="300" height="58" rx="7"/>
+  <text class="num" x="404" y="44">2</text>
+  <text class="lbl" x="422" y="45">Model serving</text>
+  <text class="sub" x="422" y="63">vLLM / engine · OpenAI-compatible API · GPUs</text>
+
+  <path class="flow" d="M330,53 L388,53" marker-end="url(#arw)"/>
+  <path class="flow" d="M540,82 L540,110 L360,110 L360,132" marker-end="url(#arw)"/>
+  <text class="sub" x="548" y="100">model returns code / tool-calls</text>
+
+  <!-- 3 scheduler -->
+  <rect class="box" x="30" y="134" width="300" height="58" rx="7"/>
+  <text class="num" x="44" y="154">3</text>
+  <text class="lbl" x="62" y="155">Kubernetes scheduler</text>
+  <text class="sub" x="62" y="173">places a task Pod on a node w/ the right resources</text>
+
+  <path class="flow" d="M180,192 L180,222" marker-end="url(#arw)"/>
+
+  <!-- 4 sandbox (the wall) -->
+  <rect class="danger" x="30" y="224" width="300" height="86" rx="7"/>
+  <text class="num" x="44" y="244" fill="#c0392b">4</text>
+  <text class="dlbl" x="62" y="245">Sandbox — the isolation boundary</text>
+  <text class="sub" x="46" y="266">runsc/gVisor or Firecracker microVM · seccomp</text>
+  <text class="sub" x="46" y="283">no-network / egress-filtered · read-only rootfs</text>
+  <text class="sub" x="46" y="300" fill="#8a2b1f">▶ runs the model-written code here</text>
+
+  <!-- 5 runtime security -->
+  <rect class="box" x="390" y="224" width="300" height="86" rx="7"/>
+  <text class="num" x="404" y="244">5</text>
+  <text class="lbl" x="422" y="245">Runtime security</text>
+  <text class="sub" x="406" y="266">Falco/Tetragon watch syscalls via eBPF</text>
+  <text class="sub" x="406" y="283">Skopeo + cosign + Kyverno gate the images</text>
+  <text class="sub" x="406" y="300">alert / kill on breakout signature</text>
+
+  <path class="flow" d="M330,267 L388,267" marker-end="url(#arw)"/>
+  <text class="sub" x="332" y="257" fill="#c0392b">watched</text>
+
+  <!-- 6 data -->
+  <rect class="box" x="30" y="352" width="660" height="58" rx="7"/>
+  <text class="num" x="44" y="372">6</text>
+  <text class="lbl" x="62" y="373">Data &amp; observability</text>
+  <text class="sub" x="62" y="391">transcript + score + security events → object store, dashboards, reproducible run record</text>
+
+  <path class="flow" d="M180,310 L180,352" marker-end="url(#arw)"/>
+  <path class="flow" d="M540,310 L540,352" marker-end="url(#arw)"/>
+
+  <text class="sub" x="360" y="440" text-anchor="middle" style="fill:#999">Layers 3–6 exist because layer 4 runs code you don't trust.</text>
+</svg>
+<figcaption>One eval task, end to end. The red box is the whole reason for the rest.</figcaption>
+</div>
+
+<h2>Toy ↔ scale, layer by layer</h2>
+<p>This table <em>is</em> the interview. Knowing which column a thing lives in — and <em>why</em> — is what separates "I read about it" from "I ran it."</p>
+<table>
+  <thead><tr><th>Layer</th><th>Real (thousands of B200s)</th><th>Your toy</th><th>Replicates?</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="t">Scheduling</td>
+      <td>k8s + gang scheduler (Volcano/Kueue), GPU operator, topology-aware placement over InfiniBand/NVLink</td>
+      <td><code>kind</code>, one node</td>
+      <td><span class="transfer-part">Concepts</span> — Pods, requests/limits, taints, RuntimeClass all real; fabric &amp; gang-scheduling <span class="transfer-no">describe-only</span></td>
+    </tr>
+    <tr>
+      <td class="t">Model serving</td>
+      <td>vLLM / internal engine, tensor + pipeline parallel across many nodes, continuous batching</td>
+      <td>one small model on one GPU, or a mock OpenAI-compatible server</td>
+      <td><span class="transfer-yes">Client contract identical</span> — your harness code doesn't change. Multi-node parallelism <span class="transfer-no">describe-only</span></td>
+    </tr>
+    <tr>
+      <td class="t">Eval harness</td>
+      <td>Inspect / internal, distributed workers + queue + results DB</td>
+      <td>Inspect, or a Python script + local queue</td>
+      <td><span class="transfer-yes">Almost 1:1</span> — this layer scales out, not up</td>
+    </tr>
+    <tr>
+      <td class="t">Sandboxing</td>
+      <td>gVisor or Firecracker microVM <em>per task</em>, seccomp, egress-filtered netns, ephemeral</td>
+      <td>gVisor RuntimeClass in kind; locked-down Pod</td>
+      <td><span class="transfer-yes">Primitives identical</span> — the crown jewel</td>
+    </tr>
+    <tr>
+      <td class="t">Runtime security</td>
+      <td>Falco/Tetragon → SIEM; Kyverno/OPA admission; cosign-signed images</td>
+      <td>Falco + a few custom rules; Skopeo; Kyverno policy</td>
+      <td><span class="transfer-yes">Mechanism identical</span>; only aggregation/policy-mgmt differs</td>
+    </tr>
+    <tr>
+      <td class="t">Data / obs</td>
+      <td>transcripts → S3, experiment tracking, full repro</td>
+      <td>local files / SQLite</td>
+      <td><span class="transfer-part">Concept transfers</span>, storage scale doesn't</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <span class="lead">The one sentence to memorize</span>
+  Most of a frontier eval stack scales <b>out, not up</b> — the same primitives, more replicas. The parts that genuinely change at scale are the <b>interconnect fabric</b> and <b>multi-node model parallelism</b>; everything else I can stand up on a laptop.
+</div>
+
+<h2>The crown jewel: the sandbox &amp; runtime security <span class="pill jewel">build &amp; demo this</span></h2>
+<p>Everything above is context for this. If you build one thing and can walk a whiteboard through it, make it this layer — it replicates perfectly, and it's where the hard, interesting questions live.</p>
+
+<div class="layer">
+  <h3>Why a container isn't enough (know this cold)</h3>
+  <p>A normal container shares the host kernel — one <code>runc</code> container is a set of namespaced processes with a seccomp filter. A kernel bug is a <b>host takeover</b>. For untrusted code you want a <em>second</em> boundary:</p>
+  <ul class="tight">
+    <li><b>gVisor (<code>runsc</code>)</b> — a user-space kernel that intercepts the sandboxed app's syscalls, so the code almost never talks to the host kernel directly. Big attack-surface reduction; costs some syscall-heavy performance.</li>
+    <li><b>Firecracker</b> — a real, tiny KVM microVM (~125&nbsp;ms boot, minimal device model). A genuine hardware-virtualization wall; what AWS Lambda/Fargate use. Heavier than gVisor, stronger boundary.</li>
+    <li><b>seccomp-bpf</b> — the syscall allow-list every layer should still carry as defense in depth.</li>
+  </ul>
+  <p class="small">Interview framing: <em>"containers isolate for <b>convenience and resource control</b>; gVisor and microVMs isolate for <b>security</b>. Untrusted model code needs the second kind, ideally both."</em></p>
+</div>
+
+<div class="layer">
+  <h3>Falco — catching the breakout <span class="small">(you named it)</span></h3>
+  <p>Falco loads an <b>eBPF</b> program into the kernel to stream syscalls and match them against rules. For evals you write task-specific rules: <em>a sandboxed eval Pod should never spawn a shell, never open an outbound socket, never write outside <code>/work</code>.</em> When the model-written code tries, Falco fires an alert (and you can wire it to kill the Pod). The killer demo: <b>trigger it yourself</b> with a benign "breakout attempt" and show the alert land.</p>
+  <p class="small"><b>Tetragon</b> (Cilium, eBPF) and <b>Sysdig</b> (Falco's commercial ancestor) are the same family — name-drop as alternatives and you sound current.</p>
+</div>
+
+<div class="layer">
+  <h3>Skopeo + admission control — only inspected knives enter <span class="small">(you named it)</span></h3>
+  <p><b>Skopeo</b> inspects and copies OCI images <em>without a daemon</em> — <code>skopeo inspect docker://…</code> to read a manifest/digest, copy between registries, check what's actually in an image before it runs. Pair with <b>cosign/sigstore</b> (signatures) and a <b>Kyverno/OPA</b> admission policy that refuses to admit any Pod whose image isn't signed and pinned by digest. That's the supply-chain-hygiene story: <em>"we don't run unsigned or floating-tag images in the eval sandbox."</em></p>
+</div>
+
+<div class="layer">
+  <h3>Network egress — the exfiltration boundary</h3>
+  <p>A default-deny <b>NetworkPolicy</b> plus an egress proxy is how you stop a sandboxed agent from phoning home or pulling a payload. "How do you keep an agentic eval from reaching the internet?" is a very common question; the answer is <em>default-deny egress, allow-list only the model/tool endpoints, log everything through a proxy</em>.</p>
+</div>
+
+<div class="callout">
+  <span class="lead">Your forensics idea, re-homed</span>
+  "Infect a benign agent, extract the script from memory" is a real skill — it's just the <b>post-incident</b> half of this layer. On a real Linux host, read the task process's <code>/proc/&lt;pid&gt;/maps</code> + <code>mem</code> to recover a fileless (<code>memfd</code>) payload that never touched disk. That pairs with Falco (detection) to make a complete "detect → contain → analyze" story.
+</div>
+
+<div class="layer">
+  <h3>Memory forensics: presence vs. behavior vs. memory</h3>
+  <p>On a <b>hardened</b> host you don't hunt known-bad — you <b>allowlist</b>, so anything off-list is suspect by mere presence. That makes a tool like <code>netcat</code> a near-zero-false-positive IOC: there's no legitimate reason for it to exist there. But because presence-detection is so effective, a real attacker escalates — and each rung defeats the previous detector, which is exactly why memory forensics is the last line:</p>
+  <table>
+    <thead><tr><th>Attacker move</th><th>Defeats</th><th>Still caught by</th></tr></thead>
+    <tbody>
+      <tr><td class="t">drop <code>nc</code> on disk</td><td>nothing</td><td><span class="transfer-yes">presence</span> — allowlist (fapolicyd), IMA/EVM integrity</td></tr>
+      <tr><td class="t">live off the land — <code>bash /dev/tcp</code>, <code>python</code> socket</td><td>presence (those are allowed)</td><td><span class="transfer-part">behavior</span> — Falco sees a raw socket / unexpected egress</td></tr>
+      <tr><td class="t">bring <code>nc</code> filelessly (<code>memfd</code>)</td><td>disk / file scanning</td><td><span class="transfer-no">memory</span> — the running process is still nc-shaped</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Mechanisms worth naming: <b>fapolicyd</b> (exec allowlist), <b>IMA/EVM</b> + <b>dm-verity</b> (binary/rootfs integrity), <b>SELinux/AppArmor</b> confinement, and Falco's default <em>"Launch Suspicious Network Tool"</em> rule.</p>
+  <div class="callout" style="margin:.8rem 0 0">
+    <span class="lead">The line to memorize</span>
+    Going fileless to beat the disk scanner <b>trades one IOC for a worse one</b>: a process whose <code>/proc/&lt;pid&gt;/exe</code> points at <code>memfd:… (deleted)</code> is wildly abnormal — nothing legitimate runs from a vanished executable. <em>Fileless execution isn't stealthier against a memory hunter; it's louder.</em> (Volatility's <code>malfind</code> and live <code>/proc</code> triage key on exactly this.)
+  </div>
+</div>
+
+<h2>Interview question bank — with answers</h2>
+<p>The green box under each answer is <b>the tell</b>: the specific phrase or trade-off that signals hands-on familiarity rather than a blog-post skim.</p>
+
+<div class="qa">
+  <div class="q">Walk me through what happens when an eval runs a piece of code the model wrote.</div>
+  <div class="a">The harness builds the task and calls the model over an OpenAI-compatible API; the model returns code or tool-calls. The harness schedules a task Pod on the cluster with a hardened <em>RuntimeClass</em> — gVisor or a Firecracker microVM — with a read-only rootfs, seccomp filter, resource caps, and default-deny egress. The model's code executes <em>only</em> inside that boundary. Falco watches its syscalls the whole time. Output and score go to storage; if Falco sees a breakout signature, the Pod is killed and flagged.</div>
+  <div class="tell"><b>Tell:</b> you name the <b>isolation boundary explicitly</b> and mention <b>egress</b> unprompted — most candidates forget the network.</div>
+</div>
+
+<div class="qa">
+  <div class="q">Why Kubernetes at all? Why not just run scripts on the GPU boxes?</div>
+  <div class="a">Because you're running thousands of short-lived, mutually-untrusted jobs across a fleet, and you need scheduling, bin-packing onto GPU nodes, per-task resource limits, RuntimeClass-based isolation, network policy, and clean teardown — all things k8s gives you declaratively. It's less "we love YAML" and more "we need a control plane for ephemeral untrusted workloads with quotas."</div>
+  <div class="tell"><b>Tell:</b> framing k8s as an <b>untrusted-workload control plane</b>, not a buzzword.</div>
+</div>
+
+<div class="qa">
+  <div class="q">Container vs. gVisor vs. microVM — when would you reach for each?</div>
+  <div class="a">Plain <code>runc</code> container for trusted first-party code — fast, shares the host kernel, one kernel bug from host compromise. gVisor when I'm running untrusted code and want a big syscall-attack-surface cut without full VM cost — pay for it on syscall-heavy workloads. Firecracker microVM when I want a true hardware-virt boundary per task and can absorb ~100&nbsp;ms boot and a bit more memory. For adversarial model code I default to gVisor or a microVM, and keep seccomp on regardless.</div>
+  <div class="tell"><b>Tell:</b> naming the <b>gVisor performance cost on syscall-heavy code</b> and Firecracker's <b>boot time</b> — real numbers, real trade-offs.</div>
+</div>
+
+<div class="qa">
+  <div class="q">How would you detect that a sandboxed task tried to break out?</div>
+  <div class="a">Runtime syscall monitoring with Falco or Tetragon over eBPF. I write rules scoped to the eval namespace: no shell spawns, no outbound connects, no writes outside the work dir, no ptrace, no unexpected setuid. A hit alerts and can trigger Pod kill. Detection is layered under prevention — the sandbox should stop it; Falco tells me when something <em>tried</em>.</div>
+  <div class="tell"><b>Tell:</b> "detection <b>under</b> prevention" — you understand defense in depth, not detection as the only control.</div>
+</div>
+
+<div class="qa">
+  <div class="q">How do you make sure the image running in the sandbox is what you think it is?</div>
+  <div class="a">Pin by digest, never floating tags. Sign images with cosign and verify signatures in a Kyverno/OPA admission policy that rejects unsigned or unpinned Pods at admission time. Use Skopeo to inspect manifests and copy between registries out-of-band. So the supply chain is: signed build → digest-pinned → admission-verified → then it can run.</div>
+  <div class="tell"><b>Tell:</b> <b>admission control</b> as the enforcement point — candidates who've only read about signing forget where it's actually <em>enforced</em>.</div>
+</div>
+
+<div class="qa">
+  <div class="q">What genuinely changes going from your laptop toy to a 10,000-GPU cluster?</div>
+  <div class="a">Two things really change: the <b>interconnect fabric</b> — InfiniBand/RDMA and NVLink topology, which the scheduler has to be aware of for big model-parallel jobs — and <b>multi-node model parallelism</b> in the serving layer. Almost everything else scales <em>out</em>: more identical sandbox Pods, more harness workers, more storage. The isolation, security, and harness logic are the same primitives replicated.</div>
+  <div class="tell"><b>Tell:</b> the <b>out-not-up</b> distinction, and correctly isolating <b>fabric + model parallelism</b> as the true scale-only parts.</div>
+</div>
+
+<div class="qa">
+  <div class="q">How do you schedule GPU jobs so a big job doesn't deadlock on partial resources?</div>
+  <div class="a">Gang scheduling — a batch scheduler like Volcano or Kueue on top of k8s that admits a job only when <em>all</em> its Pods can be placed, so a multi-GPU job doesn't grab half the GPUs and wait forever. The default k8s scheduler is Pod-at-a-time, which is fine for independent eval tasks but wrong for gang-shaped training/serving jobs.</div>
+  <div class="tell"><b>Tell:</b> knowing the <b>default scheduler is per-Pod</b> and <em>why</em> that breaks gang-shaped jobs.</div>
+</div>
+
+<div class="qa">
+  <div class="q">How do you keep evals reproducible?</div>
+  <div class="a">Pin everything: image digests, model+weights version, decoding params (temperature, seed where supported), harness commit, and the task set. Record the full transcript plus the config that produced it. Non-determinism from sampling and from batched GPU kernels means "reproducible" often means "same config + recorded transcripts," not bit-identical outputs — I'd be explicit about that limit.</div>
+  <div class="tell"><b>Tell:</b> admitting <b>GPU/batched non-determinism</b> instead of overclaiming bit-reproducibility.</div>
+</div>
+
+<div class="qa">
+  <div class="q">An agentic eval needs internet for some tasks but you're worried about exfiltration. What do you do?</div>
+  <div class="a">Default-deny egress via NetworkPolicy, then allow only through a logging forward-proxy with an allow-list of required hosts. The sandbox never gets raw internet; it gets a mediated, audited path. High-risk tasks get no network at all. Everything the agent reaches is logged, so post-hoc I can see exactly what it touched.</div>
+  <div class="tell"><b>Tell:</b> <b>mediated egress through an audited proxy</b>, not a binary on/off.</div>
+</div>
+
+<h2>Ready-to-drop lines &amp; name-drops</h2>
+<ul class="gems">
+  <li><b>The thesis:</b> "An eval platform is really an untrusted-code execution service with scoring on top — the security layer is the design, not an add-on."</li>
+  <li><b>On scale:</b> "It scales out, not up; the only truly scale-dependent parts are the interconnect fabric and multi-node model parallelism."</li>
+  <li><b>On isolation:</b> "Containers isolate for resource control; gVisor and microVMs isolate for security. Untrusted model code needs the second kind."</li>
+  <li><b>Tools, correctly placed:</b> <b>kind/k8s</b> (control plane) · <b>vLLM</b> (serving) · <b>Inspect</b> (harness) · <b>gVisor/Firecracker</b> (sandbox) · <b>Falco/Tetragon</b> (runtime detection) · <b>Skopeo/cosign/Kyverno</b> (image supply chain) · <b>Volcano/Kueue</b> (gang scheduling).</li>
+  <li><b>Honesty that reads as senior:</b> "I built a laptop-scale version, so I understand the primitives and the boundaries; I haven't operated the fabric at cluster scale, and I know that's the part that's genuinely different."</li>
+</ul>
+
+<h2>What to actually build next <span class="pill" style="background:#e7f0fb;color:#2c5aa0">when you're ready</span></h2>
+<p>The doc gets you conversational. A weekend build gets you a <em>demo</em>, which is a different level. In order of interview-signal-per-hour:</p>
+<ol>
+  <li><span class="chip" style="background:var(--blue)"></span><b>Sandbox + Falco breakout demo</b> on a real Linux host (eBPF actually fires). ~1–2 hrs. Highest signal: you can say "watch this" and trigger a detection.</li>
+  <li><span class="chip" style="background:var(--blue)"></span><b>kind cluster + a tiny Inspect-style harness</b> hitting a mock OpenAI endpoint on the MacBook. ~1 hr. Proves the harness/serving contract end-to-end.</li>
+  <li><span class="chip" style="background:var(--blue)"></span><b>Skopeo + Kyverno admission policy</b> that rejects an unsigned image. ~30 min. The supply-chain talking point becomes a thing you did.</li>
+</ol>
+<p class="small">All three fit the "toy that teaches the real thing" goal — none require a GPU cluster, and the security layers are byte-for-byte the same primitives the big labs run.</p>
+
+<h2>The A10 build path — a real GPU box for an afternoon <span class="pill" style="background:#fdf0d5;color:#8a6d1a">scripted &amp; ready</span></h2>
+<p>The MacBook is fine for the plumbing, but for the crown-jewel demo you want <b>root on a disposable real-Linux GPU box</b> — and a single <b>Lambda A10 (24&nbsp;GB, ~$0.75/hr)</b> is the cleanest option. You get a real kernel (Falco's eBPF actually fires, real <code>/proc</code> forensics), root (run k3s/kind freely), and a GPU big enough to serve a <em>real</em> small model instead of a mock. Zero blast radius — when you're done, terminate it.</p>
+
+<div class="callout">
+  <span class="lead">Already written for you</span>
+  A complete, scripted version of this lab lives at <code>~/Desktop/august28/</code> — a one-command-per-layer bundle. It's <b>reference-grade, not yet tested against a live A10</b>, so treat the fiddly steps as "should work, verify as you go." Every one of them is flagged inline with its usual failure mode and fallback.
+</div>
+
+<div class="layer">
+  <h3>The two caveats that decide the setup</h3>
+  <ul class="tight">
+    <li><span class="chip" style="background:var(--amber)"></span><b>Firecracker needs <code>/dev/kvm</code>, which a Lambda VM probably won't expose.</b> The preflight script checks. <b>gVisor doesn't care</b> — its default <code>systrap</code> platform is user-space, no KVM — so the demo runs regardless. Frame it: <em>"gVisor here; Firecracker is the same idea with a hardware-virt boundary, which I'd use on bare metal."</em></li>
+    <li><span class="chip" style="background:var(--amber)"></span><b>The box is ephemeral and metered.</b> That's why it's <em>scripted</em> — a reproducible one-command lab is a stronger interview artifact than a hand-built box you can't rebuild. Snapshot or tear down when done; Lambda A10 availability is spotty, so grab one when it's free.</li>
+    <li><span class="chip" style="background:var(--gray)"></span><b>kind's default CNI (kindnet) doesn't enforce NetworkPolicy.</b> So "no egress" may not actually block on kind — which is itself a teaching point (<em>egress control lives in the CNI; use Calico for real enforcement</em>). Falco still <em>sees</em> the connect syscall either way, so detection works regardless.</li>
+  </ul>
+</div>
+
+<div class="layer">
+  <h3>What the bundle stands up</h3>
+  <p>vLLM on the host GPU (real model, OpenAI-compatible on :8000) + a <code>kind</code> cluster carrying the whole security story:</p>
+  <table>
+    <thead><tr><th>Script</th><th>Layer it demos</th></tr></thead>
+    <tbody>
+      <tr><td class="t"><code>00-preflight.sh</code></td><td>host checks (GPU, <code>/dev/kvm</code>) + installs kind, kubectl, skopeo, runsc, helm</td></tr>
+      <tr><td class="t"><code>10-serve-model.sh</code></td><td>serving layer — a real 7B on the A10, OpenAI-compatible</td></tr>
+      <tr><td class="t"><code>20-kind-up.sh</code></td><td>k8s control plane + gVisor RuntimeClass + Falco (eBPF) + Kyverno</td></tr>
+      <tr><td class="t"><code>30-sandbox-and-falco-demo.sh</code></td><td><b>the crown jewel</b> — hardened sandbox, prove the boundary, trigger a breakout, watch Falco catch it</td></tr>
+      <tr><td class="t"><code>40-image-hygiene.sh</code></td><td>Skopeo inspect + Kyverno rejecting an unpinned image at admission</td></tr>
+      <tr><td class="t"><code>harness/run_eval.py</code></td><td>end-to-end — model writes code → runs <em>in the gVisor sandbox</em> → scored</td></tr>
+      <tr><td class="t"><code>99-teardown.sh</code></td><td><code>kind delete</code> + stop vLLM (then terminate the instance yourself)</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Run order is just top to bottom. <code>scp -r ~/Desktop/august28 ubuntu@&lt;a10&gt;:</code>, then <code>./00-preflight.sh</code> and work down.</p>
+</div>
+
+<div class="callout">
+  <span class="lead">Why this beats the alternatives, in one line</span>
+  A laptop = free but Falco's eBPF is fiddly inside a Linux VM and there's no real GPU. A shared production box = real Linux, but if it's a bastion or you lack root, k3s rewriting iptables is a real risk. <b>Lambda A10 = root + real kernel + a real GPU you fully own for the session, and nothing to break.</b> Best host for the security-and-serving demo; keep the pure-plumbing tinkering on the laptop.
+</div>
+
+<footer class="doc">
+  <b>Sources &amp; provenance:</b> Built from this session's conversation. Tool facts (gVisor/<code>runsc</code>, Firecracker, Falco/eBPF, Skopeo, cosign/Sigstore, Kyverno/OPA, Volcano/Kueue, vLLM, Inspect) reflect general knowledge current to early 2026 — verify exact flags/versions against upstream docs before demoing. No cluster was stood up to produce this; it's a study notebook. <b>Companion bundle:</b> the scripted A10 lab lives in <code>lab/</code> in this repo.<br>
+  <span class="mono">highlevel · explainer · 2026-08-28 · private exploration</span>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,27 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-image-digest
+  annotations:
+    policies.kyverno.io/title: Require images pinned by digest
+    policies.kyverno.io/description: >
+      In the eval namespace, every container image must be referenced by @sha256 digest, not a
+      floating tag. This is where "we only run signed/pinned images" is actually ENFORCED — at
+      admission — rather than merely intended at build time.
+spec:
+  # Installed in Audit so it won't block the harness demo; 40-image-hygiene.sh flips it to Enforce.
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-digest-in-evals
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [evals]
+      validate:
+        message: "Images in 'evals' must be pinned by digest (image@sha256:...), not a tag."
+        pattern:
+          spec:
+            containers:
+              - image: "*@sha256:*"

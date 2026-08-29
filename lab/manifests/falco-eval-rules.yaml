@@ -1,0 +1,42 @@
+# Custom Falco rules for the eval sandbox. Loaded by 20-kind-up.sh via the Helm chart's
+# customRules. They key on the container image 'eval-sandbox' so no k8s-metadata plugin is
+# needed — robust for a demo. In prod you'd scope by namespace via the k8smeta plugin.
+
+- macro: eval_sandbox_container
+  condition: (container.image.repository = "eval-sandbox" or container.image.repository endswith "/eval-sandbox")
+
+- rule: Shell spawned in eval sandbox
+  desc: A shell was started inside an eval sandbox that should only ever run the task interpreter.
+  condition: >
+    spawned_process and eval_sandbox_container
+    and proc.name in (shell_binaries)
+  output: >
+    Shell spawned in eval sandbox (pod=%container.name image=%container.image.repository
+    proc=%proc.cmdline parent=%proc.pname user=%user.name)
+  priority: WARNING
+  tags: [eval, breakout, mitre_execution]
+
+- rule: Outbound connection from eval sandbox
+  desc: The eval sandbox attempted an outbound network connection; it should have no egress.
+  condition: >
+    (evt.type = connect and evt.dir = < and fd.l4proto in (tcp, udp))
+    and fd.sip != "127.0.0.1" and eval_sandbox_container
+  output: >
+    Outbound connection from eval sandbox (pod=%container.name dest=%fd.sip:%fd.sport
+    proc=%proc.cmdline)
+  priority: WARNING
+  tags: [eval, breakout, exfiltration]
+
+- rule: Write outside work dir in eval sandbox
+  desc: The eval sandbox wrote to a path other than /work; rootfs is read-only, this is suspicious.
+  condition: >
+    (evt.type in (open, openat, openat2) and evt.is_open_write = true)
+    and eval_sandbox_container
+    and not fd.name startswith "/work"
+    and not fd.name startswith "/tmp"
+    and not fd.name startswith "/proc"
+    and not fd.name startswith "/dev"
+  output: >
+    Write outside /work in eval sandbox (pod=%container.name file=%fd.name proc=%proc.cmdline)
+  priority: NOTICE
+  tags: [eval, breakout]
