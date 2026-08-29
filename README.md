@@ -14,9 +14,11 @@ matters.
 
 > Security research / case-study replication. Benign throughout — see **Safety** below.
 
-**Two views of the same material:** [`RUNBOOK.md`](RUNBOOK.md) is the **operator** view (stand up
+**Three views of the same material:** [`RUNBOOK.md`](RUNBOOK.md) is the **operator** view (stand up
 and run the replication); [`docs/dfir-hunter-playbook.html`](docs/dfir-hunter-playbook.html) is the
-**defender** view (hunt these laterals — hypothesis → collect → hunt → IOC → contain).
+**defender** view (hunt these laterals — hypothesis → collect → hunt → IOC → contain);
+[`docs/swarm-gauntlet-vision.html`](docs/swarm-gauntlet-vision.html) is the **forward** view (where
+this goes — a forensics observatory for LLM swarms).
 
 ## What's inside
 
@@ -24,6 +26,7 @@ and run the replication); [`docs/dfir-hunter-playbook.html`](docs/dfir-hunter-pl
 docs/eval-infra-study-guide.html   The replication write-up: architecture, toy↔scale per layer,
                                    the sandboxing/forensics deep-dive, and the incident mapping.
 docs/dfir-hunter-playbook.html     DFIR hunter playbook: a hunt card per lateral (H1–H5)
+docs/swarm-gauntlet-vision.html    Vision & roadmap: swarm gauntlet + swarm-forensics observatory
 RUNBOOK.md                         Operator runbook: stand up + run each reproduction, teardown
 lab/                               The runnable lab (one script per layer).
   00-preflight.sh                  Host checks + install kind, kubectl, skopeo, runsc, helm
