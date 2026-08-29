@@ -18,13 +18,14 @@ say "POSTURE — collect the misconfiguration (the unlocked door)"
 bash "${CL}/misconfig_scan.sh"
 
 say "RUNTIME — collect the IOC while R2 performs the escape live"
-timeout 30 bash "${CL}/ioc_watch.sh" > /tmp/ioc.log 2>&1 &
+bash "${CL}/ioc_watch.sh" > /tmp/ioc.log 2>&1 &   # portable: no 'timeout' (absent on stock macOS)
 WPID=$!
 sleep 2
 echo "(ioc-watch running; now firing the R2 escape...)"
 bash "${HERE}/escape-room/R2-docker-socket.sh" > /tmp/r2.log 2>&1 || true
-echo "R2 verdict: $(grep -E 'ESCAPED|did not' /tmp/r2.log | head -1 | sed 's/^ *//')"
+echo "R2 verdict: $(grep -m1 -E 'ESCAPED|did not' /tmp/r2.log | sed 's/^ *//')"
 sleep 2
+pkill -P "$WPID" 2>/dev/null || true   # reap the docker-events child (portable; no process-group tricks)
 kill "$WPID" 2>/dev/null || true; wait "$WPID" 2>/dev/null || true
 echo "-- IOCs captured during the escape --"
 grep '\[IOC' /tmp/ioc.log || echo "(no IOC lines — check /tmp/ioc.log)"

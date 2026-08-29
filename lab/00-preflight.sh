@@ -60,9 +60,9 @@ for b in docker kind kubectl skopeo helm runsc; do
   printf '%-10s ' "$b"
   if ! command -v "$b" >/dev/null 2>&1; then echo "MISSING"; continue; fi
   case "$b" in
-    kubectl) kubectl version --client 2>/dev/null | head -1;;
-    helm)    helm version --short 2>/dev/null;;
-    *)       "$b" --version 2>/dev/null | head -1;;
+    kubectl) { kubectl version --client 2>/dev/null | head -1; } || true;;
+    helm)    helm version --short 2>/dev/null || true;;
+    *)       { "$b" --version 2>/dev/null | head -1; } || true;;
   esac
 done
 

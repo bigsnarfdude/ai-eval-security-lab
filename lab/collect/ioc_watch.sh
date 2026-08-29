@@ -8,10 +8,12 @@ echo "[ioc-watch] streaming docker events for escape-grade container launches...
 docker events --filter type=container --filter event=create --format '{{.Actor.ID}} {{.Actor.Attributes.image}}' \
 | while read -r id img; do
     insp=$(docker inspect "$id" 2>/dev/null) || continue   # may already be gone (fast --rm); skip
-    p=$(printf '%s' "$insp" | grep -c '"Privileged": true'); [ "$p" -gt 0 ] && p=true || p=false
-    pid=$(printf '%s' "$insp" | grep -oE '"PidMode": "host"' | head -1); [ -n "$pid" ] && pid=host || pid=""
-    sock=no; printf '%s' "$insp" | grep -q '/var/run/docker.sock' && sock=yes
-    if [ "$p" = "true" ] || [ "$pid" = "host" ] || [ "$sock" = "yes" ]; then
-      echo "[IOC $(date +%H:%M:%S)] escape-grade launch: img=$img privileged=$p pid=${pid:-none} socket=$sock (id=${id:0:12})"
+    # grep -q before && is set-e-exempt, so a non-matching container can't kill the stream
+    # (the earlier 'grep -c' returned exit 1 on zero matches and stopped the watcher).
+    p=false;  printf '%s' "$insp" | grep -q '"Privileged": true' && p=true
+    pid=none; printf '%s' "$insp" | grep -q '"PidMode": "host"' && pid=host
+    sock=no;  printf '%s' "$insp" | grep -q '/var/run/docker.sock' && sock=yes
+    if [ "$p" = true ] || [ "$pid" = host ] || [ "$sock" = yes ]; then
+      echo "[IOC $(date +%H:%M:%S)] escape-grade launch: img=$img privileged=$p pid=$pid socket=$sock (id=${id:0:12})"
     fi
   done

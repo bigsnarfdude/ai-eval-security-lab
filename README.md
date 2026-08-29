@@ -31,6 +31,8 @@ docs/eval-infra-study-guide.html   The replication write-up: architecture, toyâ†
 docs/dfir-hunter-playbook.html     DFIR hunter playbook: a hunt card per lateral (H1â€“H5)
 docs/swarm-gauntlet-vision.html    Vision & roadmap: swarm gauntlet + swarm-forensics observatory
 RUNBOOK.md                         Operator runbook: stand up + run each reproduction, teardown
+VALIDATION.md                      What was validated, on what, how to reproduce (+ QA fixes)
+LEARNING.md                        Guided hands-on path (Part 1 free on a Mac)
 lab/                               The runnable lab (one script per layer).
   00-preflight.sh                  Host checks + install kind, kubectl, skopeo, runsc, helm
   10-serve-model.sh                vLLM serves a real small model (OpenAI-compatible)

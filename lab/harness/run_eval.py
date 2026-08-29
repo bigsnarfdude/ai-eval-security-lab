@@ -11,10 +11,10 @@ This is the pattern a frontier eval platform uses; only the scale differs. The s
 property that matters — the model's code never runs on your trusted host, only in the sandbox —
 is exactly the same here as in prod.
 
-Deps: just `requests` (pip install requests). Talks to the cluster via kubectl.
+Deps: none beyond the Python standard library. Talks to the cluster via kubectl.
 """
 import json, re, subprocess, sys, tempfile, textwrap, time, os
-import requests
+import urllib.request
 
 VLLM = os.environ.get("VLLM_URL", "http://localhost:8000/v1")
 MODEL = os.environ.get("MODEL", "Qwen/Qwen2.5-7B-Instruct")
@@ -31,16 +31,17 @@ TESTS = [
 def ask_model() -> str:
     """Get a completion and pull the python code block out of it."""
     print(f"[harness] asking {MODEL} to solve the task...")
-    r = requests.post(f"{VLLM}/chat/completions", timeout=120, json={
+    payload = json.dumps({
         "model": MODEL,
         "temperature": 0.2,
         "messages": [
             {"role": "system", "content": "You are a terse coding assistant. Reply with ONLY a python code block."},
             {"role": "user", "content": TASK},
         ],
-    })
-    r.raise_for_status()
-    content = r.json()["choices"][0]["message"]["content"]
+    }).encode()
+    req = urllib.request.Request(f"{VLLM}/chat/completions", data=payload,
+                                 headers={"Content-Type": "application/json"})
+    content = json.loads(urllib.request.urlopen(req, timeout=120).read())["choices"][0]["message"]["content"]
     m = re.search(r"```(?:python)?\s*(.*?)```", content, re.S)
     code = (m.group(1) if m else content).strip()
     print("[harness] model returned code:\n" + textwrap.indent(code, "    "))

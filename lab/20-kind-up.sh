@@ -48,6 +48,8 @@ say "Install Falco (modern eBPF driver) with the eval breakout rules"
 helm repo add falcosecurity https://falcosecurity.github.io/charts >/dev/null 2>&1 || true
 helm repo update >/dev/null
 # Load our custom rules via a values override that appends a custom rules file.
+# NOTE (reproducibility): the Falco chart version floats here. Pin it with `--version <x.y.z>`
+# once you've re-validated a specific chart on your kernel; see VALIDATION.md.
 helm upgrade --install falco falcosecurity/falco \
   --namespace falco --create-namespace \
   --set driver.kind=modern_ebpf \
@@ -63,7 +65,7 @@ echo "Falco events:  kubectl -n falco logs -l app.kubernetes.io/name=falco -f | 
 say "Install Kyverno + require-digest policy (in Audit mode so it won't block the demo)"
 helm repo add kyverno https://kyverno.github.io/kyverno/ >/dev/null 2>&1 || true
 helm repo update >/dev/null
-helm upgrade --install kyverno kyverno/kyverno --namespace kyverno --create-namespace --wait --timeout 5m
+helm upgrade --install kyverno kyverno/kyverno --version 3.9.0 --namespace kyverno --create-namespace --wait --timeout 5m
 kubectl apply -f "${HERE}/manifests/kyverno-require-digest.yaml"
 
 say "Cluster ready"

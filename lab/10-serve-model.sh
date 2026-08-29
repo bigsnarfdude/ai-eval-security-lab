@@ -24,7 +24,7 @@ docker run -d --name "$NAME" --gpus all --restart unless-stopped \
 echo "Waiting for the model to load (first run pulls weights — can be several minutes)..."
 for i in $(seq 1 120); do
   if curl -fsS "http://localhost:${PORT}/v1/models" >/dev/null 2>&1; then
-    echo "vLLM is up:"; curl -fsS "http://localhost:${PORT}/v1/models" | head -c 400; echo
+    echo "vLLM is up:"; curl -fsS "http://localhost:${PORT}/v1/models" 2>/dev/null | head -c 400 || true; echo
     echo "Tail logs with: docker logs -f $NAME"
     exit 0
   fi
