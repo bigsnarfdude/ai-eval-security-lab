@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: escape-room
+  namespace: evals
+  labels: { app: escape-room }
+spec:
+  # runc (NOT gVisor) so Falco's host probe can attribute the escape method.
+  # A gVisor pod would both change the isolation and blind the detector (see 30-demo).
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  containers:
+    - name: agent
+      image: escape-room:demo
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "3600"]
+      securityContext:
+        runAsUser: 10001
+        runAsNonRoot: true
+        # NOTE: allowPrivilegeEscalation is left at its default (true) ON PURPOSE — the setuid
+        # helper IS the intended escape path. Setting it false would set no_new_privs and
+        # neuter setuid, closing the room. That trade-off is itself part of the lesson.
+      resources:
+        requests: { cpu: "100m", memory: "128Mi" }
+        limits:   { cpu: "500m", memory: "256Mi" }
