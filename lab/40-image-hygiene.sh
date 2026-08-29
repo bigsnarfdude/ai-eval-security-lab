@@ -30,5 +30,8 @@ kubectl -n evals delete pod good-image --ignore-not-found
 
 echo
 echo "That's the whole supply-chain story: signing/pinning is enforced at ADMISSION, not just at build."
-echo "(Set the policy back to Audit if you want the harness demo to run unpinned images:"
-echo "   kubectl patch clusterpolicy require-image-digest --type merge -p '{\"spec\":{\"validationFailureAction\":\"Audit\"}}' )"
+# IMPORTANT: reset to Audit so later steps (60/70/80/harness) that use tag images in 'evals'
+# aren't blocked by this policy. (Enforce above was only to demonstrate the block.)
+kubectl patch clusterpolicy require-image-digest --type merge \
+  -p '{"spec":{"validationFailureAction":"Audit"}}' >/dev/null 2>&1 \
+  && echo "Policy reset to Audit — later tag-image steps will run. Flip to Enforce again to re-demo the block."
