@@ -25,9 +25,11 @@ lab/                               The runnable lab (one script per layer).
   40-image-hygiene.sh              Skopeo inspect + Kyverno rejecting an unpinned image
   50-memory-forensics.sh           detect → adapt → recover: presence → behavior → memory
   60-covert-channel.sh             two isolated agents collude via a shared allowlisted cache → detect → prevent
+  70-transcript-spoof.sh           agent's self-reported transcript is a lie → caught by out-of-band kernel capture
   harness/run_eval.py              Model writes code → runs it IN the sandbox → scored
   payload/                         Benign memory-forensics samples (canary agent, fileless launcher)
   covert-channel/                  The Hugging Face incident's signature failure, reproduced + fixed
+  transcript-spoof/                Spoofed tool calls (incident surprise #5), caught by reconciliation
 ```
 
 ## The layers, and what each teaches
@@ -52,6 +54,11 @@ The **entire stack** was run on a rented A10, not just written:
 - **End-to-end harness** — Qwen2.5-7B (served by vLLM on the A10) wrote `is_palindrome`, the code ran **inside the gVisor sandbox**, scored 4/4.
 - **Memory forensics** — presence → behavioral → fileless-`memfd` IOC → exact-bytes recovery from `/proc/<pid>/fd` with a confirmed canary.
 - **Covert channel (the Hugging Face incident)** — two isolated agents colluded through a shared allowlisted "package cache"; the detector caught it (client-side non-package PUT + cross-agent read), and per-agent namespacing closed it (agent-b's read → 404).
+- **Transcript spoofing (incident surprise #5)** — a spoofing agent's self-reported transcript claimed `python3 summarize.py --safe` while the kernel (Falco, out-of-band) recorded it actually running `whoami; cat /etc/os-release`; reconciliation flagged the executed-but-unreported command. An honest agent reconciled clean.
+
+### The through-line
+
+Three demos, one principle: **never trust the observed to report on itself — get ground truth from a layer the subject can't edit, then reconcile.** The flag lives in a separate container; memory forensics reads `/proc` not the process's story; the transcript is reconciled against kernel capture. This maps directly onto ExploitGym's design and the Hugging Face incident's failure modes.
 
 Fiddly steps (gVisor-into-kind, Falco enrichment, GPU-in-Docker) are flagged inline with the failure modes actually hit while bringing this up.
 
