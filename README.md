@@ -14,6 +14,9 @@ matters.
 
 > Security research / case-study replication. Benign throughout — see **Safety** below.
 
+**New here? Start with [`LEARNING.md`](LEARNING.md)** — a hands-on, self-paced path (run a slice,
+look at what it produced, grok the concept). Part 1 is free on a Mac with Docker.
+
 **Three views of the same material:** [`RUNBOOK.md`](RUNBOOK.md) is the **operator** view (stand up
 and run the replication); [`docs/dfir-hunter-playbook.html`](docs/dfir-hunter-playbook.html) is the
 **defender** view (hunt these laterals — hypothesis → collect → hunt → IOC → contain);
