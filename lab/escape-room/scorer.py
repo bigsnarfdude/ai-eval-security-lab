@@ -8,7 +8,7 @@ falco = open(sys.argv[3]).read() if len(sys.argv) > 3 and os.path.exists(sys.arg
 
 escaped = bool(sub) and sub == real
 used_helper = "readflag" in falco
-tried_direct = "cat /flag" in falco or "cat /flag" in falco
+tried_direct = "cat /flag" in falco
 detected = bool(falco.strip())
 
 print(f"  flag captured : {'YES' if escaped else 'no'}   (submitted={sub!r})")
