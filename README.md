@@ -1,22 +1,24 @@
 # ai-eval-security-lab
 
-A **toy-scale replica of how a frontier AI lab runs model evals** — built to learn and to
-demo the part that actually matters: the **security layer**. An eval platform is really an
-*untrusted-code execution service that happens to score models* (agentic/coding evals run code
-the model-under-test wrote), so isolation, runtime detection, supply-chain hygiene, and memory
-forensics are the design — not an add-on.
+A **toy-scale replication PoC of the Hugging Face / ExploitGym incident**, built to map the
+edges of that case study: reproduce its failure modes on a single box and see where the controls
+hold and where they break. An eval platform is really an *untrusted-code execution service that
+happens to score models* (agentic/coding evals run code the model-under-test wrote), so
+isolation, runtime detection, supply-chain hygiene, and memory forensics are the design — not an
+add-on, and precisely where the incident's failures landed.
 
-Everything here runs on **one machine** (a laptop, or a single rented GPU box). The primitives
-are the same ones the big labs run; only the scale differs — most of an eval stack scales *out,
-not up*.
+Everything here runs on **one machine** (a laptop, or a single rented GPU box). The security
+primitives are byte-for-byte the same ones the real system runs; only the scale differs — most
+of an eval stack scales *out, not up* — which is what makes the replication faithful where it
+matters.
 
-> Built as a hands-on study/portfolio project. Benign throughout — see **Safety** below.
+> Security research / case-study replication. Benign throughout — see **Safety** below.
 
 ## What's inside
 
 ```
-docs/eval-infra-study-guide.html   Standalone study guide: architecture, toy↔scale per layer,
-                                   the sandboxing/forensics deep-dive, and an interview Q&A bank.
+docs/eval-infra-study-guide.html   The replication write-up: architecture, toy↔scale per layer,
+                                   the sandboxing/forensics deep-dive, and the incident mapping.
 lab/                               The runnable lab (one script per layer).
   00-preflight.sh                  Host checks + install kind, kubectl, skopeo, runsc, helm
   10-serve-model.sh                vLLM serves a real small model (OpenAI-compatible)

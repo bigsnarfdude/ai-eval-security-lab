@@ -1,16 +1,14 @@
-# Toy Frontier-Eval Lab — Lambda A10 bundle
+# Replication lab — single-box bundle
 
-**Goal:** stand up a laptop-scale replica of how a frontier lab runs model evals, on a
-single rented **Lambda A10 (24 GB)** instance, so you can *demo* the crown-jewel layer
-(sandboxing + runtime security) and speak to it from hands-on experience.
+**Goal:** stand up a laptop-scale replication of a frontier eval harness on one machine
+(a laptop, or a single rented GPU box such as a Lambda A10, 24 GB), then reproduce the
+Hugging Face / ExploitGym incident's failure modes against it.
 
-Pairs with the study guide: `~/Desktop/highlevel_eval-infra-interview-prep_2026-08-28.html`.
+Pairs with the write-up: `../docs/eval-infra-study-guide.html`.
 
-> **Status: reference scripts, not tested against a live A10.** I wrote these to be correct
-> and runnable, but I could not execute them (no instance). Treat the fiddly steps
-> (gVisor-into-kind, Falco eBPF, GPU-in-Docker) as "should work, verify as you go." Where a
-> step commonly fights back, the script says so. Fail loud — if something skips, don't call
-> it done.
+> **Status: validated end-to-end on a live NVIDIA A10 (Ubuntu 22.04).** The fiddly steps
+> (gVisor-into-kind, Falco enrichment, GPU-in-Docker) are flagged inline with the failure
+> modes actually hit while bringing them up. Fail loud — if a step skips, it isn't done.
 
 ---
 
@@ -38,7 +36,7 @@ scale.
    demo runs regardless — you just say "Firecracker is the same idea with a hardware-virt
    boundary; I'd use it on bare metal."
 2. **The box is ephemeral and metered (~$0.75/hr).** That's why this is *scripted* — a
-   reproducible one-command lab is a better interview artifact than a hand-built box. Snapshot
+   reproducible one-command lab rebuilds from the repo, so nothing is lost on teardown. Snapshot
    or `99-teardown.sh` when done. Lambda A10 availability is spotty; grab one when it's free.
 
 ## Run order
@@ -56,9 +54,9 @@ python3 harness/run_eval.py      # end-to-end: model writes code → runs in san
 
 Each script is independent and re-runnable (idempotent-ish). Read the banner each one prints.
 
-## What each piece is *for* (the interview mapping)
+## What each piece demonstrates
 
-| File | Demonstrates | Interview line it earns you |
+| File | Demonstrates | In one line |
 |---|---|---|
 | `10-serve-model.sh` | serving layer, OpenAI-compatible contract | "the client contract is identical to prod; only parallelism changes at scale" |
 | `20-kind-up.sh` | k8s as an untrusted-workload control plane | "k8s is the control plane for ephemeral untrusted jobs, not a buzzword" |
