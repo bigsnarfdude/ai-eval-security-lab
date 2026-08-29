@@ -24,9 +24,13 @@ fi
 
 say "Docker + NVIDIA runtime"
 have docker || { echo "!! docker missing — Lambda images normally include it"; exit 1; }
-docker info 2>/dev/null | grep -qi 'Runtimes:.*nvidia' \
-  && echo "nvidia container runtime: OK" \
-  || echo "!! nvidia runtime not shown in 'docker info' — 'docker run --gpus all' may fail; check nvidia-container-toolkit"
+# heuristic — check the Runtimes field, then fall back to a loose grep (docker info layout varies by version)
+if docker info --format '{{.Runtimes}}' 2>/dev/null | grep -qi nvidia || docker info 2>/dev/null | grep -qi nvidia; then
+  echo "nvidia container runtime: registered"
+else
+  echo "note: nvidia runtime not detected by this heuristic (it varies by Docker version)."
+  echo "      the real test is:  docker run --rm --gpus all ubuntu nvidia-smi  — if that shows the GPU, you're fine."
+fi
 
 say "Installing CLI tools (kind, kubectl, skopeo, runsc, helm)"
 ARCH="$(dpkg --print-architecture)"   # amd64 on Lambda A10
