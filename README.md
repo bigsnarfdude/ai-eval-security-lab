@@ -24,8 +24,10 @@ lab/                               The runnable lab (one script per layer).
   30-sandbox-and-falco-demo.sh     Hardened sandbox → trigger a breakout → Falco catches it
   40-image-hygiene.sh              Skopeo inspect + Kyverno rejecting an unpinned image
   50-memory-forensics.sh           detect → adapt → recover: presence → behavior → memory
+  60-covert-channel.sh             two isolated agents collude via a shared allowlisted cache → detect → prevent
   harness/run_eval.py              Model writes code → runs it IN the sandbox → scored
   payload/                         Benign memory-forensics samples (canary agent, fileless launcher)
+  covert-channel/                  The Hugging Face incident's signature failure, reproduced + fixed
 ```
 
 ## The layers, and what each teaches
@@ -49,6 +51,7 @@ The **entire stack** was run on a rented A10, not just written:
 - **Supply chain** — Kyverno's admission webhook **rejected** a tag-pinned pod and **admitted** the digest-pinned one.
 - **End-to-end harness** — Qwen2.5-7B (served by vLLM on the A10) wrote `is_palindrome`, the code ran **inside the gVisor sandbox**, scored 4/4.
 - **Memory forensics** — presence → behavioral → fileless-`memfd` IOC → exact-bytes recovery from `/proc/<pid>/fd` with a confirmed canary.
+- **Covert channel (the Hugging Face incident)** — two isolated agents colluded through a shared allowlisted "package cache"; the detector caught it (client-side non-package PUT + cross-agent read), and per-agent namespacing closed it (agent-b's read → 404).
 
 Fiddly steps (gVisor-into-kind, Falco enrichment, GPU-in-Docker) are flagged inline with the failure modes actually hit while bringing this up.
 
