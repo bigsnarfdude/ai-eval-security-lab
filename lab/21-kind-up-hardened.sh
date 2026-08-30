@@ -84,22 +84,25 @@ say "Create evals namespace + default-deny egress (Calico enforces it now)"
 kubectl create namespace evals --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f "${HERE}/manifests/deny-egress.yaml"
 
-# --- Falco with the gVisor engine (reads runsc's exported syscalls, not the host kernel) ---
-# !! UPSTREAM DRIFT (found on the live run, 2026-08-29): the Falco Helm chart 9.1.0 (app 0.44.1)
-#    REMOVED the chart-managed gVisor driver. `--set driver.kind=gvisor` now hard-fails with:
-#      "The following chart configuration is no longer supported: driver.kind=gvisor, driver.gvisor"
-#    gVisor is still supported by the Falco *binary* via falco.yaml `engine.kind=gvisor`, but the
-#    chart no longer wires it. Getting Falco to consume runsc's stream on this chart therefore needs
-#    a manual engine config (or an older chart, or running Falco standalone). This step is NOT yet
-#    validated end-to-end — see VALIDATION.md. The egress-enforcement half of the twin (Calico) IS
-#    validated. Below we install Falco on the host driver so the cluster is usable; swap in the
-#    gVisor engine wiring once pinned.
-say "Install Falco (NOTE: chart 9.1.0 dropped the gVisor driver — see comment above)"
+# --- Falco (host eBPF) — and WHY it stays blind to gVisor here on purpose --------------------
+# !! FALCO+gVISOR IS DEAD UPSTREAM (established on the live run, 2026-08-29). We chased it to the
+#    end; all three rungs are broken:
+#      - Falco binary 0.44:   gVisor engine + `--gvisor-generate-config` REMOVED (deprecated 0.43).
+#      - Falco chart 9.1.0:   `driver.kind=gvisor` hard-fails ("no longer supported").
+#      - Falco chart 8.0.5 / app 0.43.1 (the LAST version with gVisor): its gvisor-init container
+#        crash-loops — the init script calls `/bin/bash`, absent from the 0.43.1 image
+#        (exec: "/bin/bash": no such file or directory). Broken against its own image.
+#    Conclusion: you cannot un-blind a gVisor pod with host-side Falco anymore without forking
+#    Falco's images. This is the field conceding the lab's own thesis — you can't monitor a layer
+#    built to be opaque to you. So the DURABLE un-blinding is NOT host-syscall capture; it is:
+#      1. EGRESS at the CNI/proxy  -> Calico, VALIDATED above (connect from the gVisor pod BLOCKED).
+#      2. A trusted TOOL-BROKER / exec-ledger reconciled against the transcript -> see 70-transcript
+#         -spoof.sh (works regardless of runtime; the broker records truth the sandbox can't edit).
+#    We install host-eBPF Falco below so the cluster is usable and the runc-vs-gVisor contrast from
+#    the vuln lab still holds; it is BLIND to the gVisor pod on purpose. See VALIDATION.md.
+say "Install Falco (host eBPF; blind to gVisor by design — see comment: Falco+gVisor is EOL upstream)"
 helm repo add falcosecurity https://falcosecurity.github.io/charts >/dev/null 2>&1 || true
 helm repo update >/dev/null
-# Generate a schema-correct pod-init for THIS runsc version rather than hand-writing points:
-#   docker run --rm falcosecurity/falco:<app_ver> falco --gvisor-generate-config \
-#     > manifests/pod-init-gvisor.json      # then wire runsc.toml pod-init-config + engine.kind=gvisor
 helm upgrade --install falco falcosecurity/falco \
   --namespace falco --create-namespace \
   --set driver.kind=modern_ebpf \
@@ -108,8 +111,8 @@ helm upgrade --install falco falcosecurity/falco \
   --wait --timeout 5m || {
     echo "!! Falco install failed. Check kernel BTF (ls /sys/kernel/btf/vmlinux) or chart drift."
   }
-echo "NOTE: this Falco is on the host eBPF driver and will be BLIND to the gVisor pod (same as the"
-echo "      vuln lab). The gVisor-engine wiring that un-blinds it is the open item in VALIDATION.md."
+echo "NOTE: host-eBPF Falco is BLIND to the gVisor pod by design. Detection that survives gVisor"
+echo "      lives at the egress boundary (Calico, validated) and the tool-broker ledger (see 70)."
 
 say "Hardened cluster ready"
 kubectl get runtimeclass
