@@ -98,17 +98,32 @@ Needs a real Linux host with root (a Lambda A10 is ideal — see `RUNBOOK.md`). 
 - **Look:** covert channel (isolated agents talk via a shared cache → detected → prevented); transcript spoof (self-report ≠ kernel exec); escape-room R1 (agent reads a root-only flag via a setuid helper, scored ESCAPED/DETECTED).
 - **Grok:** these are the Hugging Face incident's behaviors in miniature — and each is caught by reconciling against a layer the agent can't edit. (Playbook H2/H3/H4.)
 
+### Lesson 11 — Hardening: the vulnerable/hardened twin (and the limits of fixing it)
+- **Goal:** now *fix* what Lessons 2–10 exposed — and learn that some fixes exist and some don't.
+- **Run:** stand up the hardened twin **alongside** the vulnerable cluster (both coexist):
+  ```bash
+  ./21-kind-up-hardened.sh     # evallab-hardened: Calico CNI + gVisor + Falco
+  ./31-demo-fixed.sh           # same gVisor sandbox + same breakout, on the hardened cluster
+  ```
+- **Look:** the *same* gVisor pod's outbound `connect()`:
+  - on the vuln cluster (`20`/`30`, kindnet) it **SUCCEEDS** — kindnet ignores NetworkPolicy;
+  - on the hardened cluster (`21`/`31`, Calico) it is **BLOCKED** (a timeout — the SYN is dropped).
+  And Falco on the hardened cluster is *still blind* to the gVisor pod.
+- **Grok:** two separate lessons.
+  1. **Enforcement lives in the CNI.** `deny-egress.yaml` is only a *request*; kindnet ignores it, Calico enforces it. Same policy, open → blocked, just by swapping the CNI.
+  2. **Some fixes aren't available.** You *cannot* un-blind host-Falco into a gVisor pod anymore — the Falco gVisor engine was **removed upstream in Falco 0.44** (deprecated 0.43; the last chart that shipped it is itself broken). That's the field conceding the lab's thesis: you can't watch a layer built to be opaque to you. So durable detection for gVisor workloads moves *off* the host syscall path — to **egress** (Calico, validated) and the **tool-broker / exec-ledger** reconciliation from Lesson 10. (Full record: `VALIDATION.md` → "Hardened twin".)
+
 ---
 
 ## Part 3 — Concepts & where it goes (reading, no run)
 
-### Lesson 11 — How GPUs get shared
+### Lesson 12 — How GPUs get shared
 Read the study guide's serving section + ask Claude to re-explain: **application batching** (one server, one GPU tenant) vs **time-slicing / MIG / vGPU** (splitting one GPU among pods) vs **tensor parallelism** (combining many GPUs for one big model). Default k8s gives a pod a *whole* GPU.
 
-### Lesson 12 — Hunting, end to end
+### Lesson 13 — Hunting, end to end
 Read `docs/dfir-hunter-playbook.html`. For each lateral you ran in Parts 1–2, map it to its hunt card (H1–H5): hypothesis → collect (posture) → hunt (runtime) → confirming IOC → contain.
 
-### Lesson 13 — Where it goes: swarms
+### Lesson 14 — Where it goes: swarms
 Read `docs/swarm-gauntlet-vision.html`, especially "What's genuinely hard — and how we de-risk it." Understand why 8 agents ≠ 8 GPUs, why the influence graph is the hard/novel tool, and why the P1 instrument v0 (forced split-flag on 2–3 agents) is the go/no-go.
 
 ---
@@ -122,3 +137,4 @@ Read `docs/swarm-gauntlet-vision.html`, especially "What's genuinely hard — an
 - [ ] a real container escape comes from over-privilege + mount misconfig (socket, hostPath, privileged)
 - [ ] a misconfig and an IOC are the same inventory viewed at two times
 - [ ] the incident's failures reduce to one rule: never trust the observed to report on itself; reconcile
+- [ ] enforcement lives in the CNI (kindnet ignores NetworkPolicy, Calico enforces it) — and some fixes don't exist (host-Falco can't see into gVisor anymore), so detection moves to egress + the tool-broker ledger
