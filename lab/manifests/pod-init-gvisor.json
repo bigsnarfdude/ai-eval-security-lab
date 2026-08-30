@@ -1,0 +1,19 @@
+{
+  "trace_session": {
+    "name": "Default",
+    "points": [
+      { "name": "container/start", "context_fields": ["cwd"] },
+      { "name": "syscall/openat/enter", "context_fields": ["credentials", "container_id"] },
+      { "name": "syscall/connect/enter", "context_fields": ["credentials", "container_id"] },
+      { "name": "syscall/execve/enter", "context_fields": ["credentials", "container_id"] },
+      { "name": "syscall/socket/enter", "context_fields": ["credentials", "container_id"] }
+    ],
+    "sinks": [
+      {
+        "name": "remote",
+        "config": { "endpoint": "/run/falco/gvisor.sock" },
+        "ignore_setup_error": true
+      }
+    ]
+  }
+}

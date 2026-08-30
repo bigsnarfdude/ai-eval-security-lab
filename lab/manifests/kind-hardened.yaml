@@ -1,0 +1,10 @@
+# kind config for the HARDENED twin cluster.
+# Key difference vs the vulnerable path: we DISABLE kindnet so a real,
+# NetworkPolicy-enforcing CNI (Calico) can take over. Without this, deny-egress.yaml
+# is decorative (kindnet ignores NetworkPolicy) — that is exactly the bug the vuln lab shows.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: evallab-hardened
+networking:
+  disableDefaultCNI: true      # <-- no kindnet; Calico will provide + ENFORCE policy
+  podSubnet: "10.244.0.0/16"   # must match Calico's IP pool CIDR (set in 21-kind-up-hardened.sh)
